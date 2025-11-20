@@ -34,7 +34,7 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define CHUNK_SIZE 512
+#define CHUNK_SIZE 64000
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -71,27 +71,11 @@ static void MX_SPI2_Init(void);
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
-uint8_t audio_received = 0; //flag to indicate when the first set buffer full of audio is recieved
-uint8_t audio_buffer[CHUNK_SIZE * 2]; // double the size of the chunk size for ping pong buffer
-
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
-	if(audio_received == 0) {
-		HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, audio_buffer, CHUNK_SIZE * 2, DAC_ALIGN_8B_R);
-		HAL_TIM_Base_Start(&htim2);
-	    HAL_UART_Receive_DMA(&hlpuart1, audio_buffer + CHUNK_SIZE, CHUNK_SIZE);
-		audio_received = 1;
-	}
-}
+//Read 30 bytes from "test.txt" on the SD card
+uint8_t readBuf[CHUNK_SIZE] = {0};
 
 void HAL_DAC_ConvCpltCallbackCh1(DAC_HandleTypeDef* hdac) {
-	HAL_UART_Transmit(&hlpuart1, "S", 1, 1000);
-    HAL_UART_Receive_DMA(&hlpuart1, audio_buffer + CHUNK_SIZE, CHUNK_SIZE);
-}
-
-void HAL_DAC_ConvHalfCpltCallbackCh1(DAC_HandleTypeDef* hdac) {
-	HAL_UART_Transmit(&hlpuart1, "S", 1, 1000);
-    HAL_UART_Receive_DMA(&hlpuart1, audio_buffer, CHUNK_SIZE);
+	memset(readBuf, 0, sizeof(readBuf));
 }
 
 /* USER CODE END 0 */
@@ -161,17 +145,15 @@ int main(void)
   free_sectors = free_clusters * getFreeFs->csize;
 
   //Now let's try to open file "test.txt"
-  fres = f_open(&fil, "clap2.raw", FA_READ);
+  fres = f_open(&fil, "clap.raw", FA_READ);
   if (fres != FR_OK) {
 	while(1);
   }
 
-  //Read 30 bytes from "test.txt" on the SD card
-  BYTE readBuf[CHUNK_SIZE];
-
   //We can either use f_read OR f_gets to get data out of files
   //f_gets is a wrapper on f_read that does some string formatting for us
-  TCHAR* rres = f_gets((TCHAR*)readBuf, CHUNK_SIZE, &fil);
+  UINT bytesRead = 0;
+  FRESULT rres = f_read(&fil, readBuf, CHUNK_SIZE, &bytesRead);
   if(rres != 0) {
 	HAL_Delay(100);
   }
@@ -180,8 +162,9 @@ int main(void)
   f_close(&fil);
 
   // fill the entire buffer to start
-	HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, readBuf, CHUNK_SIZE, DAC_ALIGN_8B_R);
-
+//  HAL_DAC_Start(&hdac1, DAC_CHANNEL_1);
+  HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t*)readBuf, CHUNK_SIZE, DAC_ALIGN_8B_R);
+  HAL_TIM_Base_Start(&htim2);
   /* USER CODE END 2 */
 
   /* Infinite loop */
