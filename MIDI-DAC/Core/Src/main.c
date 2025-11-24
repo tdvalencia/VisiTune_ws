@@ -54,6 +54,7 @@ SPI_HandleTypeDef hspi2;
 TIM_HandleTypeDef htim2;
 
 /* USER CODE BEGIN PV */
+char lastKey = 0;
 
 /* USER CODE END PV */
 
@@ -66,7 +67,7 @@ static void MX_DAC1_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_SPI2_Init(void);
 /* USER CODE BEGIN PFP */
-
+void play_sound_byte(const TCHAR* name);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -76,6 +77,142 @@ uint8_t readBuf[CHUNK_SIZE] = {0};
 
 void HAL_DAC_ConvCpltCallbackCh1(DAC_HandleTypeDef* hdac) {
 	memset(readBuf, 0, sizeof(readBuf));
+}
+
+void play_sound_byte(const TCHAR* name) {
+
+	  HAL_Delay(1000); //a short delay is important to let the SD card settle
+
+	  //some variables for FatFs
+	  FATFS FatFs; 	//Fatfs handle
+	  FIL fil; 		//File handle
+	  FRESULT fres; //Result after operations
+
+	  //Open the file system
+	  fres = f_mount(&FatFs, "", 1); //1=mount now
+	  if (fres != FR_OK) {
+		while(1);
+	  }
+
+	  //Let's get some statistics from the SD card
+	  DWORD free_clusters, free_sectors, total_sectors;
+
+	  FATFS* getFreeFs;
+
+	  fres = f_getfree("", &free_clusters, &getFreeFs);
+	  if (fres != FR_OK) {
+		while(1);
+	  }
+
+	  //Formula comes from ChaN's documentation
+	  total_sectors = (getFreeFs->n_fatent - 2) * getFreeFs->csize;
+	  free_sectors = free_clusters * getFreeFs->csize;
+
+	  //Now let's try to open file "test.txt"
+	  fres = f_open(&fil, name, FA_READ);
+	  if (fres != FR_OK) {
+		while(1);
+	  }
+
+	  //We can either use f_read OR f_gets to get data out of files
+	  //f_gets is a wrapper on f_read that does some string formatting for us
+	  UINT bytesRead = 0;
+	  FRESULT rres = f_read(&fil, readBuf, CHUNK_SIZE, &bytesRead);
+	  if(rres != 0) {
+		HAL_Delay(100);
+	  }
+
+	  //Be a tidy kiwi - don't forget to close your file!
+	  f_close(&fil);
+
+	  // fill the entire buffer to start
+	//  HAL_DAC_Start(&hdac1, DAC_CHANNEL_1);
+	  HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t*)readBuf, CHUNK_SIZE, DAC_ALIGN_8B_R);
+	  HAL_TIM_Base_Start(&htim2);
+}
+
+char MIDI_Play() {
+	char keyPressed;
+    // Keypad layout mapping
+    static const char keymap[4][4] = {
+        {'1','2','3','A'},
+        {'4','5','6','B'},
+        {'7','8','9','C'},
+        {'*','0','#','D'}
+    };
+
+    GPIO_TypeDef* rowPorts[4] = {Row_4_GPIO_Port, Row_3_GPIO_Port, Row_2_GPIO_Port, Row_1_GPIO_Port};
+    uint16_t rowPins[4]        = {Row_4_Pin,       Row_3_Pin,       Row_2_Pin,       Row_1_Pin};
+
+    GPIO_TypeDef* colPorts[4] = {Col_4_GPIO_Port, Col_3_GPIO_Port, Col_2_GPIO_Port, Col_1_GPIO_Port};
+    uint16_t colPins[4]        = {Col_4_Pin,       Col_3_Pin,       Col_2_Pin,       Col_1_Pin};
+
+    // Scan each row
+    for (int r = 0; r < 4; r++)
+    {
+        // Set all rows HIGH
+        HAL_GPIO_WritePin(Row_1_GPIO_Port, Row_1_Pin, GPIO_PIN_SET);
+        HAL_GPIO_WritePin(Row_2_GPIO_Port, Row_2_Pin, GPIO_PIN_SET);
+        HAL_GPIO_WritePin(Row_3_GPIO_Port, Row_3_Pin, GPIO_PIN_SET);
+        HAL_GPIO_WritePin(Row_4_GPIO_Port, Row_4_Pin, GPIO_PIN_SET);
+
+        // Pull this row LOW
+        HAL_GPIO_WritePin(rowPorts[r], rowPins[r], GPIO_PIN_RESET);
+
+        // Check columns
+        for (int c = 0; c < 4; c++)
+        {
+            if (HAL_GPIO_ReadPin(colPorts[c], colPins[c]) == GPIO_PIN_RESET)
+            {
+                HAL_Delay(20);  // debounce
+                // Check again
+                if (HAL_GPIO_ReadPin(colPorts[c], colPins[c]) == GPIO_PIN_RESET)
+                {
+                    // Wait for release
+                    while (HAL_GPIO_ReadPin(colPorts[c], colPins[c]) == GPIO_PIN_RESET);
+
+                    keyPressed = keymap[r][c];  // return the key pressed
+                }
+            }
+        }
+    }
+
+    switch(keyPressed) {
+    	case '1':
+    		play_sound_byte("boom.raw");
+    	case '2':
+    		play_sound_byte("boom.raw");
+    	case '3':
+    		play_sound_byte("boom.raw");
+    	case 'A':
+    		play_sound_byte("boom.raw");
+    	case '4':
+    		play_sound_byte("boom.raw");
+    	case '5':
+    		play_sound_byte("boom.raw");
+    	case '6':
+    		play_sound_byte("boom.raw");
+    	case 'B':
+    		play_sound_byte("boom.raw");
+    	case '7':
+    		play_sound_byte("boom.raw");
+    	case '8':
+    		play_sound_byte("boom.raw");
+    	case '9':
+    		play_sound_byte("boom.raw");
+    	case 'C':
+    		play_sound_byte("boom.raw");
+    	case '*':
+    		play_sound_byte("boom.raw");
+    	case '0':
+    		play_sound_byte("boom.raw");
+    	case '#':
+    		play_sound_byte("boom.raw");
+    	case 'D':
+    		play_sound_byte("boom.raw");
+    }
+
+    return 0; // no key pressed
 }
 
 /* USER CODE END 0 */
@@ -117,60 +254,13 @@ int main(void)
   MX_FATFS_Init();
   /* USER CODE BEGIN 2 */
 
-  HAL_Delay(1000); //a short delay is important to let the SD card settle
-
-  //some variables for FatFs
-  FATFS FatFs; 	//Fatfs handle
-  FIL fil; 		//File handle
-  FRESULT fres; //Result after operations
-
-  //Open the file system
-  fres = f_mount(&FatFs, "", 1); //1=mount now
-  if (fres != FR_OK) {
-	while(1);
-  }
-
-  //Let's get some statistics from the SD card
-  DWORD free_clusters, free_sectors, total_sectors;
-
-  FATFS* getFreeFs;
-
-  fres = f_getfree("", &free_clusters, &getFreeFs);
-  if (fres != FR_OK) {
-	while(1);
-  }
-
-  //Formula comes from ChaN's documentation
-  total_sectors = (getFreeFs->n_fatent - 2) * getFreeFs->csize;
-  free_sectors = free_clusters * getFreeFs->csize;
-
-  //Now let's try to open file "test.txt"
-  fres = f_open(&fil, "clap.raw", FA_READ);
-  if (fres != FR_OK) {
-	while(1);
-  }
-
-  //We can either use f_read OR f_gets to get data out of files
-  //f_gets is a wrapper on f_read that does some string formatting for us
-  UINT bytesRead = 0;
-  FRESULT rres = f_read(&fil, readBuf, CHUNK_SIZE, &bytesRead);
-  if(rres != 0) {
-	HAL_Delay(100);
-  }
-
-  //Be a tidy kiwi - don't forget to close your file!
-  f_close(&fil);
-
-  // fill the entire buffer to start
-//  HAL_DAC_Start(&hdac1, DAC_CHANNEL_1);
-  HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t*)readBuf, CHUNK_SIZE, DAC_ALIGN_8B_R);
-  HAL_TIM_Base_Start(&htim2);
   /* USER CODE END 2 */
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
   while (1)
   {
+	  MIDI_Play();
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -449,7 +539,13 @@ static void MX_GPIO_Init(void)
   HAL_PWREx_EnableVddIO2();
 
   /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOF, Row_4_Pin|Row_3_Pin|Row_2_Pin, GPIO_PIN_SET);
+
+  /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(Row_1_GPIO_Port, Row_1_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pins : PE2 PE3 */
   GPIO_InitStruct.Pin = GPIO_PIN_2|GPIO_PIN_3;
@@ -459,12 +555,11 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Alternate = GPIO_AF13_SAI1;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PF0 PF1 PF2 */
-  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_2;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_OD;
+  /*Configure GPIO pins : Row_4_Pin Row_3_Pin Row_2_Pin */
+  GPIO_InitStruct.Pin = Row_4_Pin|Row_3_Pin|Row_2_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-  GPIO_InitStruct.Alternate = GPIO_AF4_I2C2;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOF, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PF7 */
@@ -475,12 +570,16 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Alternate = GPIO_AF13_SAI1;
   HAL_GPIO_Init(GPIOF, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PC0 PC1 PC3 PC4
-                           PC5 */
-  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_3|GPIO_PIN_4
-                          |GPIO_PIN_5;
+  /*Configure GPIO pins : PC0 PC3 */
+  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_3;
   GPIO_InitStruct.Mode = GPIO_MODE_ANALOG_ADC_CONTROL;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : Col_1_Pin Col_2_Pin Col_3_Pin */
+  GPIO_InitStruct.Pin = Col_1_Pin|Col_2_Pin|Col_3_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PA1 PA3 */
@@ -511,11 +610,11 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PB2 PB6 */
-  GPIO_InitStruct.Pin = GPIO_PIN_2|GPIO_PIN_6;
-  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+  /*Configure GPIO pin : Col_4_Pin */
+  GPIO_InitStruct.Pin = Col_4_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(Col_4_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PE7 PE8 PE9 PE10
                            PE11 PE12 PE13 */
@@ -535,12 +634,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Alternate = GPIO_AF3_TIM1_COMP1;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : SD_CS_Pin */
-  GPIO_InitStruct.Pin = SD_CS_Pin;
+  /*Configure GPIO pins : SD_CS_Pin Row_1_Pin */
+  GPIO_InitStruct.Pin = SD_CS_Pin|Row_1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(SD_CS_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PB14 */
   GPIO_InitStruct.Pin = GPIO_PIN_14;

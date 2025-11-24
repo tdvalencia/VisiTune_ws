@@ -72,7 +72,7 @@ def prompt_port():
 def prompt_baud():
     baud_options = [
         "115200", "230400", "460800", "921600",
-        "1000000", "2000000", "2500000", "3000000", "4000000"
+        "1000000", "1500000", "2000000", "2500000", "3000000", "4000000"
     ]
     selected = choose_from_list("Select a baud rate:", baud_options)
     return int(selected)

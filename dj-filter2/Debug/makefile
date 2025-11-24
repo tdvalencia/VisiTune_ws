@@ -60,8 +60,8 @@ all: main-build
 main-build: dj-filter2.elf secondary-outputs
 
 # Tool invocations
-dj-filter2.elf dj-filter2.map: $(OBJS) $(USER_OBJS) C:\Users\tvalencia\STM32CubeIDE\workspace_1.19.0\dj-filter2\STM32L4R5ZITXP_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "dj-filter2.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"C:\Users\tvalencia\STM32CubeIDE\workspace_1.19.0\dj-filter2\STM32L4R5ZITXP_FLASH.ld" --specs=nosys.specs -Wl,-Map="dj-filter2.map" -Wl,--gc-sections -static -L"C:\Users\tvalencia\STM32CubeIDE\workspace_1.19.0\dj-filter2\Drivers\CMSIS_DSP" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -u _printf_float -Wl,--start-group -lc -lm -Wl,--end-group
+dj-filter2.elf dj-filter2.map: $(OBJS) $(USER_OBJS) /home/nick/STM32CubeIDE/VisiTune_ws/dj-filter2/STM32L4R5ZITXP_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "dj-filter2.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"/home/nick/STM32CubeIDE/VisiTune_ws/dj-filter2/STM32L4R5ZITXP_FLASH.ld" --specs=nosys.specs -Wl,-Map="dj-filter2.map" -Wl,--gc-sections -static -L"/home/nick/STM32CubeIDE/VisiTune_ws/dj-filter2/Drivers/CMSIS_DSP" --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -u _printf_float -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 

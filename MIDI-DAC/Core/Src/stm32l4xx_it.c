@@ -41,7 +41,33 @@
 
 /* Private variables ---------------------------------------------------------*/
 /* USER CODE BEGIN PV */
+    GPIO_TypeDef* rowPort[4] = {
+        Row_4_GPIO_Port,
+        Row_3_GPIO_Port,
+        Row_2_GPIO_Port,
+        Row_1_GPIO_Port
+    };
 
+    uint16_t rowPin[4] = {
+        Row_4_Pin,
+        Row_3_Pin,
+        Row_2_Pin,
+        Row_1_Pin
+    };
+
+    GPIO_TypeDef* colPort[4] = {
+            Col_4_GPIO_Port,
+            Col_3_GPIO_Port,
+            Col_2_GPIO_Port,
+            Col_1_GPIO_Port
+        };
+
+        uint16_t colPin[4] = {
+            Col_4_Pin,
+            Col_3_Pin,
+            Col_2_Pin,
+            Col_1_Pin
+        };
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
