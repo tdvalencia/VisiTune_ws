@@ -24,6 +24,7 @@
 #include "packets.h"
 #include "tft.h"
 #include <string.h>
+#include "arm_math.h"
 
 /* USER CODE END Includes */
 
@@ -89,48 +90,144 @@ uint8_t rewind_flag = 0;
 uint8_t pause_state = 0;
 uint8_t forward_flag = 0;
 
-// UART RX context
-typedef enum {
-	RX_STATE_WAIT_PREFIX,   // waiting for 2 sync + 7 header bytes
-	RX_STATE_WAIT_PAYLOAD,  // waiting for payload (image or audio)
-	RX_STATE_WAIT_CRC       // waiting for audio CRC (2 bytes)
-} uart_rx_state_t;
+		#define PKT_SYNC_SIZE    2   // 0xA5, 0x5A
+		#define PKT_HEADER_SIZE  (sizeof(pkt_header_t))  // 7 bytes (packed)
+		#define PKT_PREFIX_SIZE  (PKT_SYNC_SIZE + PKT_HEADER_SIZE) // 9 bytes before payload
+		#define PKT_CRC_SIZE     2
+
+		#define UART_ACK_HEADER  'H'
+		#define UART_ACK_OK      'S'
+		#define UART_ACK_ERR     'E'
+		#define UART_ACK_NEXT_AUDIO_CHUNK 'A'
+
+		// Packet size/overhead (must match Python script)
+		#define PKT_OVERHEAD     (PKT_SYNC_SIZE + PKT_HEADER_SIZE + PKT_CRC_SIZE) // 11
+		#define PKT_MAX_SIZE     0xFFFFu  // total packet: sync+header+payload+CRC
+
+		#define IMG_PKT_MAX_SIZE     PKT_MAX_SIZE
+		#define AUD_PKT_MAX_SIZE     PKT_MAX_SIZE
+
+		#define IMG_MAX_PAYLOAD_BYTES  (IMG_PKT_MAX_SIZE - PKT_OVERHEAD)
+		#define AUD_MAX_PAYLOAD_BYTES  (AUD_PKT_MAX_SIZE - PKT_OVERHEAD)
+
+		// DAC circular buffer: 2 halves, each half holds one max audio payload worth of samples
+		// 2 bytes per 16-bit PCM sample => samples = bytes/2
+		#define DAC_HALF_SAMPLES   (AUD_MAX_PAYLOAD_BYTES / 2u)
+		#define DAC_BUF_SAMPLES    (2u * DAC_HALF_SAMPLES)
+
+		// UART RX context
+	typedef enum {
+		RX_STATE_WAIT_PREFIX,   // waiting for 2 sync + 7 header bytes
+		RX_STATE_WAIT_PAYLOAD,  // waiting for payload (image or audio)
+		RX_STATE_WAIT_CRC       // waiting for audio CRC (2 bytes)
+	} uart_rx_state_t;
 
 
-typedef struct {
-	uart_rx_state_t state;
-	uint8_t  prefix_buf[PKT_PREFIX_SIZE];  // 9 bytes: sync + header
-	pkt_header_t header;
-	uint16_t payload_len;
-	uint8_t *payload_dst;                  // destination buffer for payload+CRC
-} uart_rx_ctx_t;
+		typedef struct {
+			uart_rx_state_t state;
+			uint8_t  prefix_buf[PKT_PREFIX_SIZE];  // 9 bytes: sync + header
+			pkt_header_t header;
+			uint16_t payload_len;
+			uint8_t *payload_dst;                  // destination buffer for payload+CRC
+		} uart_rx_ctx_t;
 
-uart_rx_ctx_t g_uart_rx;
+		uart_rx_ctx_t g_uart_rx;
 
-// Buffers
-uint16_t dac_buf[DAC_BUF_SAMPLES];  // DAC circular buffer
+		// Buffers
+		uint16_t dac_buf[DAC_BUF_SAMPLES];  // DAC circular buffer
 
-uint8_t image_pkt_buf[IMG_MAX_PAYLOAD_BYTES + PKT_CRC_SIZE];
+		uint8_t image_pkt_buf[IMG_MAX_PAYLOAD_BYTES + PKT_CRC_SIZE];
 
-// Audio RX views onto dac_buf halves
-uint8_t *audio_pkt_buf0 = (uint8_t *)dac_buf;                      // first half
-uint8_t *audio_pkt_buf1 = (uint8_t *)&dac_buf[DAC_HALF_SAMPLES];   // second half
+		// Audio RX views onto dac_buf halves
+		uint8_t *audio_pkt_buf0 = (uint8_t *)dac_buf;                      // first half
+		uint8_t *audio_pkt_buf1 = (uint8_t *)&dac_buf[DAC_HALF_SAMPLES];   // second half
 
-// NEW: CRC storage for audio packets
-uint8_t audio_crc_buf[PKT_CRC_SIZE];
+		// NEW: CRC storage for audio packets
+		uint8_t audio_crc_buf[PKT_CRC_SIZE];
 
-// Flags
-volatile uint8_t  image_pkt_ready = 0;
-volatile uint16_t image_pkt_len   = 0;
+		// Flags
+		volatile uint8_t  image_pkt_ready = 0;
+		volatile uint16_t image_pkt_len   = 0;
 
-volatile uint8_t  audio_pkt_ready = 0;
-volatile uint8_t  audio_write_idx = 0;   // 0 or 1
-volatile uint16_t audio_pkt_len   = 0;
+		volatile uint8_t  audio_pkt_ready = 0;
+		volatile uint8_t  audio_write_idx = 0;   // 0 or 1
+		volatile uint16_t audio_pkt_len   = 0;
 
-// Which halves of dac_buf are free to write into
-volatile uint8_t half0_free = 1;  // dac_buf[0 .. DAC_HALF_SAMPLES-1]
-volatile uint8_t half1_free = 1;  // dac_buf[DAC_HALF_SAMPLES .. end]
+		// Which halves of dac_buf are free to write into
+		volatile uint8_t half0_free = 1;  // dac_buf[0 .. DAC_HALF_SAMPLES-1]
+		volatile uint8_t half1_free = 1;  // dac_buf[DAC_HALF_SAMPLES .. end]
 
+
+
+
+		//CODE FOR FILTERING
+		//LOW PASS
+		//#define FIR_TAPS 74
+		//arm_fir_instance_q15 fir_low;
+		//q15_t firState_low[FIR_TAPS + DAC_HALF_SAMPLES - 1];
+//		q15_t firCoeffs_low[74] = {
+//		      -6,   -9,  -12,  -15,
+//		     -19,  -22,  -25,  -26,
+//		     -26,  -24,  -20,  -12,
+//		       0,   16,   38,   65,
+//		      98,  137,  183,  235,
+//		     293,  357,  427,  501,
+//		     578,  658,  739,  820,
+//		     899,  975, 1047, 1112,
+//		    1170, 1219, 1258, 1287,
+//		    1305, 1311, 1305, 1287,
+//		    1258, 1219, 1170, 1112,
+//		    1047,  975,  899,  820,
+//		     739,  658,  578,  501,
+//		     427,  357,  293,  235,
+//		     183,  137,   98,   65,
+//		      38,   16,    0,  -12,
+//		     -20,  -24,  -26,  -26,
+//		     -25,  -22,  -19,  -15,
+//		     -12,   -9
+//		};
+//
+//		q15_t filter_buf_low[DAC_HALF_SAMPLES];
+		//END LOW PASS
+
+		//arm_fir_instance_q15 fir_high;
+		//q15_t firState_high[FIR_TAPS + DAC_HALF_SAMPLES - 1];
+		//q15_t firCoeffs_high[74] = {
+//		       0,   -4,  -10,  -16,
+//		     -22,  -23,  -18,   -4,
+//		      17,   45,   73,   94,
+//		     100,   85,   43,  -24,
+//		    -108, -194, -263, -295,
+//		    -271, -179,  -22,  186,
+//		     414,  619,  751,  760,
+//		     608,  270, -252, -929,
+//		    -1707, -2513, -3262, -3869,
+//		    -4266, 28365, -4266, -3869,
+//		    -3262, -2513, -1707, -929,
+//		    -252,  270,  608,  760,
+//		     751,  619,  414,  186,
+//		     -22, -179, -271, -295,
+//		    -263, -194, -108,  -24,
+//		      43,   85,  100,   94,
+//		      73,   45,   17,   -4,
+//		     -18,  -23,  -22,  -16,
+//		     -10,   -4
+//		};
+//
+		q15_t filter_buf[DAC_HALF_SAMPLES];
+		#define FFT_SIZE 1024
+		#define FFT_INCREMENT (FFT_SIZE / 2)
+
+		float32_t fft_in[FFT_SIZE];
+		float32_t fft_out[FFT_SIZE];
+		float32_t overlap[FFT_INCREMENT];
+		static float32_t window[FFT_SIZE];
+		q15_t debug_out_buffer[DAC_HALF_SAMPLES];
+
+		arm_rfft_fast_instance_f32 rfft;
+
+
+		//END FILTERING
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -146,12 +243,71 @@ static void MX_ADC1_Init(void);
 static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 static void uart_start_header_rx(void);
+void processFFT(const q15_t* in, q15_t* out, uint16_t num_samples);
 
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+void processFFT(const q15_t* in, q15_t* out, uint16_t num_samples) {
+	uint32_t pos = 0;
+	while ((pos + FFT_INCREMENT) <= num_samples) {
+		for (int i = 0; i < FFT_SIZE; i++) {
+			float32_t sample = 0.0f;
+		    if (pos + i < num_samples) {
+		    	sample = (float32_t)in[pos + i] / 32768.0f;  // q15 → float
+		    }
+		    fft_in[i] = sample * window[i];
+		}
 
+		arm_rfft_fast_f32(&rfft, fft_in, fft_out, 0);
+
+		int low_bin = 15;
+		int high_bin = 450;
+		float32_t lowShelfGain = 3.5f;
+		//for (int b = cutoff_bin; b < FFT_INCREMENT; b++) {
+		//	fft_out[b*2]   = 0.0f;
+		//    fft_out[b*2+1] = 0.0f;
+		//}
+		for (int b = 0; b < low_bin; b++) {
+			float32_t weight = lowShelfGain +
+			                       (1.0f - lowShelfGain) * ((float)b / low_bin);
+			fft_out[b*2] *= weight;
+			fft_out[b*2+1] *= weight;
+		}
+
+
+		for (int b = low_bin; b < high_bin; b++) {
+			fft_out[b*2] *= 0.0f;
+			fft_out[b*2] *= 0.0f;
+		}
+
+		arm_rfft_fast_f32(&rfft, fft_out, fft_in, 1);
+
+		//don't get this
+		for (int i = 0; i < FFT_INCREMENT; i++) {
+			fft_in[i] += overlap[i];
+		}
+		//end don't get this
+
+		for (int i = 0; i < FFT_INCREMENT && pos + i < num_samples; i++) {
+			float32_t x = fft_in[i];
+			if (x > 1.0f) x = 1.0f;
+			if (x < -1.0f) x = -1.0f;
+			out[pos + i] = (int16_t)(x * 32767.0f);
+		}
+
+		for (int i = 0; i < FFT_INCREMENT; ++i) {
+			overlap[i] = fft_in[i+FFT_INCREMENT];
+		}
+
+		pos += FFT_INCREMENT;
+	}
+	//for (uint32_t i = 0; i < num_samples; i++) {
+	//    debug_out_buffer[i] = out[i];
+	//}
+	//int bruhhhh = 0;
+}
 
 
 /* USER CODE END 0 */
@@ -214,6 +370,8 @@ int main(void)
       dac_buf[i] = 2048; // mid-scale for 12-bit
   }
 
+
+
   /* Start DAC in circular DMA mode over dac_buf */
   if (HAL_DAC_Start_DMA(&hdac1,
                         DAC_CHANNEL_1,
@@ -222,6 +380,22 @@ int main(void)
                         DAC_ALIGN_12B_R) != HAL_OK) {
       Error_Handler();
   }
+
+  //INIT FIR
+  arm_rfft_fast_init_f32(&rfft, FFT_SIZE);
+  for (int i = 0; i < FFT_SIZE; i++) {
+      window[i] = 0.5f - 0.5f * arm_cos_f32((2 * PI * i) / (FFT_SIZE - 1));
+  }
+  memset(overlap, 0, sizeof(overlap));
+  //arm_status lowPassStatus = arm_fir_init_q15(&fir_low, FIR_TAPS, firCoeffs_low, firState_low, DAC_HALF_SAMPLES);
+  //if (lowPassStatus != ARM_MATH_SUCCESS) {
+	//  Error_Handler();
+  //}
+//  arm_status highPassStatus = arm_fir_init_q15(&fir_high, FIR_TAPS, firCoeffs_high, firState_high, DAC_HALF_SAMPLES);
+//    if (highPassStatus != ARM_MATH_SUCCESS) {
+//  	  Error_Handler();
+//    }
+  //END INIT FIR
 
 
   /* USER CODE END 2 */
@@ -312,8 +486,14 @@ int main(void)
 	      int16_t  *src = (int16_t *)payload_bytes;        // signed PCM
 	      uint16_t *dst = (uint16_t *)payload_bytes;       // same locations for DAC
 
+	      //arm_fir_fast_q15(&fir_low, src, filter_buf_low, DAC_HALF_SAMPLES);
+	      //arm_fir_fast_q15(&fir_high, src, filter_buf_high, DAC_HALF_SAMPLES);
+
+	      processFFT(src, filter_buf, num_samples);
+
+	      //Below translates src into the dst. Our goal is to turn src into the output of the FFT
 	      for (uint16_t i = 0; i < num_samples; ++i) {
-	          int32_t s = src[i];      // -32768..32767
+	          int32_t s = filter_buf[i];      // -32768..32767
 	          s += 32768;              // 0..65535
 	          if (s < 0)      s = 0;
 	          if (s > 65535)  s = 65535;
@@ -324,6 +504,9 @@ int main(void)
 	      for (uint16_t i = num_samples; i < DAC_HALF_SAMPLES; ++i) {
 	          dst[i] = 2048;
 	      }
+
+	      //dst[i] should be what we're outputting, here is where we'll mess with it
+
 
 	      // Tell PC this packet was accepted and written into that half
 	      uint8_t ack = UART_ACK_OK;
