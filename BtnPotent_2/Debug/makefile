@@ -60,8 +60,8 @@ all: main-build
 main-build: BtnPotent_2.elf secondary-outputs
 
 # Tool invocations
-BtnPotent_2.elf BtnPotent_2.map: $(OBJS) $(USER_OBJS) /Users/shantmanoukian/STM32CubeIDE/workspace_1.19.0/BtnPotent_2/STM32L4R5ZITXP_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "BtnPotent_2.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"/Users/shantmanoukian/STM32CubeIDE/workspace_1.19.0/BtnPotent_2/STM32L4R5ZITXP_FLASH.ld" --specs=nosys.specs -Wl,-Map="BtnPotent_2.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+BtnPotent_2.elf BtnPotent_2.map: $(OBJS) $(USER_OBJS) /home/nick/STM32CubeIDE/VisiTune_ws/BtnPotent_2/STM32L4R5ZITXP_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "BtnPotent_2.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"/home/nick/STM32CubeIDE/VisiTune_ws/BtnPotent_2/STM32L4R5ZITXP_FLASH.ld" --specs=nosys.specs -Wl,-Map="BtnPotent_2.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 

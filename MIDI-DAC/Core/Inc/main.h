@@ -57,24 +57,24 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
-#define Row_4_Pin GPIO_PIN_0
-#define Row_4_GPIO_Port GPIOF
-#define Row_3_Pin GPIO_PIN_1
-#define Row_3_GPIO_Port GPIOF
-#define Row_2_Pin GPIO_PIN_2
-#define Row_2_GPIO_Port GPIOF
-#define Col_1_Pin GPIO_PIN_1
-#define Col_1_GPIO_Port GPIOC
-#define Col_2_Pin GPIO_PIN_4
-#define Col_2_GPIO_Port GPIOC
-#define Col_3_Pin GPIO_PIN_5
-#define Col_3_GPIO_Port GPIOC
-#define Col_4_Pin GPIO_PIN_2
-#define Col_4_GPIO_Port GPIOB
+#define Col_4_Pin GPIO_PIN_0
+#define Col_4_GPIO_Port GPIOF
+#define Col_3_Pin GPIO_PIN_1
+#define Col_3_GPIO_Port GPIOF
+#define Col_2_Pin GPIO_PIN_2
+#define Col_2_GPIO_Port GPIOF
+#define Row_1_Pin GPIO_PIN_1
+#define Row_1_GPIO_Port GPIOC
+#define Row_2_Pin GPIO_PIN_4
+#define Row_2_GPIO_Port GPIOC
+#define Row_3_Pin GPIO_PIN_5
+#define Row_3_GPIO_Port GPIOC
+#define Row_4_Pin GPIO_PIN_2
+#define Row_4_GPIO_Port GPIOB
 #define SD_CS_Pin GPIO_PIN_12
 #define SD_CS_GPIO_Port GPIOB
-#define Row_1_Pin GPIO_PIN_6
-#define Row_1_GPIO_Port GPIOB
+#define Col_1_Pin GPIO_PIN_6
+#define Col_1_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 #define SD_SPI_HANDLE hspi2

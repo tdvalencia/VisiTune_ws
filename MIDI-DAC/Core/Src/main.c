@@ -17,7 +17,6 @@
   */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
-#include <sd_card.h>
 #include "main.h"
 #include "fatfs.h"
 
@@ -72,51 +71,51 @@ static void MX_SPI2_Init(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-char MIDI_Play() {
-	char keyPressed;
-    // Keypad layout mapping
-    static const char keymap[4][4] = {
-        {'1','2','3','A'},
-        {'4','5','6','B'},
-        {'7','8','9','C'},
-        {'*','0','#','D'}
-    };
+char read_keypad() {
+	// Row pins
+	GPIO_TypeDef* ROW_PORT[4] = {Row_1_GPIO_Port, Row_2_GPIO_Port, Row_3_GPIO_Port, Row_4_GPIO_Port};
+	uint16_t      ROW_PIN[4]  = {Row_1_Pin,       Row_2_Pin,       Row_3_Pin,       Row_4_Pin};
 
-    GPIO_TypeDef* rowPorts[4] = {Row_4_GPIO_Port, Row_3_GPIO_Port, Row_2_GPIO_Port, Row_1_GPIO_Port};
-    uint16_t rowPins[4]        = {Row_4_Pin,       Row_3_Pin,       Row_2_Pin,       Row_1_Pin};
+	// Col pins
+	GPIO_TypeDef* COL_PORT[4] = {Col_1_GPIO_Port, Col_2_GPIO_Port, Col_3_GPIO_Port, Col_4_GPIO_Port};
+	uint16_t     COL_PIN[4]  = {Col_1_Pin,       Col_2_Pin,       Col_3_Pin,       Col_4_Pin};
 
-    GPIO_TypeDef* colPorts[4] = {Col_4_GPIO_Port, Col_3_GPIO_Port, Col_2_GPIO_Port, Col_1_GPIO_Port};
-    uint16_t colPins[4]        = {Col_4_Pin,       Col_3_Pin,       Col_2_Pin,       Col_1_Pin};
+	// Key map (customize to your keypad)
+	char KEY_MAP[4][4] =
+	{
+		{'1','2','3','A'},
+		{'4','5','6','B'},
+		{'7','8','9','C'},
+		{'*','0','#','D'}
+	};
 
-    // Scan each row
-    for (int r = 0; r < 4; r++)
-    {
-        // Set all rows HIGH
-        HAL_GPIO_WritePin(Row_1_GPIO_Port, Row_1_Pin, GPIO_PIN_SET);
-        HAL_GPIO_WritePin(Row_2_GPIO_Port, Row_2_Pin, GPIO_PIN_SET);
-        HAL_GPIO_WritePin(Row_3_GPIO_Port, Row_3_Pin, GPIO_PIN_SET);
-        HAL_GPIO_WritePin(Row_4_GPIO_Port, Row_4_Pin, GPIO_PIN_SET);
+	for (int c = 0; c < 4; c++)
+	{
+		// Drive all columns HIGH
+		for (int i = 0; i < 4; i++)
+			HAL_GPIO_WritePin(COL_PORT[i], COL_PIN[i], GPIO_PIN_SET);
 
-        // Pull this row LOW
-        HAL_GPIO_WritePin(rowPorts[r], rowPins[r], GPIO_PIN_RESET);
+		// Drive only this column LOW
+		HAL_GPIO_WritePin(COL_PORT[c], COL_PIN[c], GPIO_PIN_RESET);
 
-        // Check columns
-        for (int c = 0; c < 4; c++)
-        {
-            if (HAL_GPIO_ReadPin(colPorts[c], colPins[c]) == GPIO_PIN_RESET)
-            {
-                HAL_Delay(20);  // debounce
-                // Check again
-                if (HAL_GPIO_ReadPin(colPorts[c], colPins[c]) == GPIO_PIN_RESET)
-                {
-                    // Wait for release
-                    while (HAL_GPIO_ReadPin(colPorts[c], colPins[c]) == GPIO_PIN_RESET);
+		HAL_Delay(1); // settle time
 
-                    keyPressed = keymap[r][c];  // return the key pressed
-                }
-            }
-        }
-    }
+		// Read each row
+		for (int r = 0; r < 4; r++)
+		{
+			if (HAL_GPIO_ReadPin(ROW_PORT[r], ROW_PIN[r]) == GPIO_PIN_RESET)
+			{
+				HAL_Delay(20);   // debounce
+				if (HAL_GPIO_ReadPin(ROW_PORT[r], ROW_PIN[r]) == GPIO_PIN_RESET)
+					return KEY_MAP[r][c];
+			}
+		}
+	}
+
+	return 0;
+}
+
+void MIDI_Play(char keyPressed) {
 
     switch(keyPressed) {
     	case '1':
@@ -152,8 +151,6 @@ char MIDI_Play() {
     	case 'D':
     		play_sound_byte("boom.raw", &hdac1, &htim2);
     }
-
-    return 0; // no key pressed
 }
 
 /* USER CODE END 0 */
@@ -201,7 +198,7 @@ int main(void)
   /* USER CODE BEGIN WHILE */
   while (1)
   {
-	  MIDI_Play();
+	  MIDI_Play(read_keypad());
     /* USER CODE END WHILE */
 
     /* USER CODE BEGIN 3 */
@@ -480,13 +477,13 @@ static void MX_GPIO_Init(void)
   HAL_PWREx_EnableVddIO2();
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(GPIOF, Row_4_Pin|Row_3_Pin|Row_2_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(GPIOF, Col_4_Pin|Col_3_Pin|Col_2_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
-  HAL_GPIO_WritePin(Row_1_GPIO_Port, Row_1_Pin, GPIO_PIN_SET);
+  HAL_GPIO_WritePin(Col_1_GPIO_Port, Col_1_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pins : PE2 PE3 */
   GPIO_InitStruct.Pin = GPIO_PIN_2|GPIO_PIN_3;
@@ -496,8 +493,8 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Alternate = GPIO_AF13_SAI1;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : Row_4_Pin Row_3_Pin Row_2_Pin */
-  GPIO_InitStruct.Pin = Row_4_Pin|Row_3_Pin|Row_2_Pin;
+  /*Configure GPIO pins : Col_4_Pin Col_3_Pin Col_2_Pin */
+  GPIO_InitStruct.Pin = Col_4_Pin|Col_3_Pin|Col_2_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
@@ -517,8 +514,8 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : Col_1_Pin Col_2_Pin Col_3_Pin */
-  GPIO_InitStruct.Pin = Col_1_Pin|Col_2_Pin|Col_3_Pin;
+  /*Configure GPIO pins : Row_1_Pin Row_2_Pin Row_3_Pin */
+  GPIO_InitStruct.Pin = Row_1_Pin|Row_2_Pin|Row_3_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
@@ -551,11 +548,11 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pin : Col_4_Pin */
-  GPIO_InitStruct.Pin = Col_4_Pin;
+  /*Configure GPIO pin : Row_4_Pin */
+  GPIO_InitStruct.Pin = Row_4_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLUP;
-  HAL_GPIO_Init(Col_4_GPIO_Port, &GPIO_InitStruct);
+  HAL_GPIO_Init(Row_4_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PE7 PE8 PE9 PE10
                            PE11 PE12 PE13 */
@@ -575,8 +572,8 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Alternate = GPIO_AF3_TIM1_COMP1;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : SD_CS_Pin Row_1_Pin */
-  GPIO_InitStruct.Pin = SD_CS_Pin|Row_1_Pin;
+  /*Configure GPIO pins : SD_CS_Pin Col_1_Pin */
+  GPIO_InitStruct.Pin = SD_CS_Pin|Col_1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;

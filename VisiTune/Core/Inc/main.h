@@ -57,6 +57,23 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define LOW_FILTER_Pin GPIO_PIN_0
+#define LOW_FILTER_GPIO_Port GPIOA
+#define MID_FILTER_Pin GPIO_PIN_1
+#define MID_FILTER_GPIO_Port GPIOA
+#define HIGH_FILTER_Pin GPIO_PIN_2
+#define HIGH_FILTER_GPIO_Port GPIOA
+#define DYNAMIC_FILTER_Pin GPIO_PIN_3
+#define DYNAMIC_FILTER_GPIO_Port GPIOA
+#define REWIND_Pin GPIO_PIN_13
+#define REWIND_GPIO_Port GPIOF
+#define REWIND_EXTI_IRQn EXTI15_10_IRQn
+#define PAUSE_Pin GPIO_PIN_0
+#define PAUSE_GPIO_Port GPIOG
+#define PAUSE_EXTI_IRQn EXTI0_IRQn
+#define FORWARD_Pin GPIO_PIN_1
+#define FORWARD_GPIO_Port GPIOG
+#define FORWARD_EXTI_IRQn EXTI1_IRQn
 
 /* USER CODE BEGIN Private defines */
 

@@ -17,8 +17,7 @@ void play_sound_byte(const TCHAR* file_name, DAC_HandleTypeDef *hdac, TIM_Handle
 	  //some variables for FatFs
 	  FATFS FatFs; 	//Fatfs handle
 	  FIL fil; 		//File handle
-	  FRESULT
-; //Result after operations
+	  FRESULT fres; //Result after operations
 
 	  //Open the file system
 	  fres = f_mount(&FatFs, "", 1); //1=mount now
