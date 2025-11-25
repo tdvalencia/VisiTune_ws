@@ -17,14 +17,13 @@
   */
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
+#include <sd_card.h>
 #include "main.h"
 #include "fatfs.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
-#include <stdio.h>
-#include <string.h>
-#include <stdarg.h> //for va_list var arg functions
+#include "sd_card.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -67,69 +66,11 @@ static void MX_DAC1_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_SPI2_Init(void);
 /* USER CODE BEGIN PFP */
-void play_sound_byte(const TCHAR* name);
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-//Read 30 bytes from "test.txt" on the SD card
-uint8_t readBuf[CHUNK_SIZE] = {0};
-
-void HAL_DAC_ConvCpltCallbackCh1(DAC_HandleTypeDef* hdac) {
-	memset(readBuf, 0, sizeof(readBuf));
-}
-
-void play_sound_byte(const TCHAR* name) {
-
-	  HAL_Delay(1000); //a short delay is important to let the SD card settle
-
-	  //some variables for FatFs
-	  FATFS FatFs; 	//Fatfs handle
-	  FIL fil; 		//File handle
-	  FRESULT fres; //Result after operations
-
-	  //Open the file system
-	  fres = f_mount(&FatFs, "", 1); //1=mount now
-	  if (fres != FR_OK) {
-		while(1);
-	  }
-
-	  //Let's get some statistics from the SD card
-	  DWORD free_clusters, free_sectors, total_sectors;
-
-	  FATFS* getFreeFs;
-
-	  fres = f_getfree("", &free_clusters, &getFreeFs);
-	  if (fres != FR_OK) {
-		while(1);
-	  }
-
-	  //Formula comes from ChaN's documentation
-	  total_sectors = (getFreeFs->n_fatent - 2) * getFreeFs->csize;
-	  free_sectors = free_clusters * getFreeFs->csize;
-
-	  //Now let's try to open file "test.txt"
-	  fres = f_open(&fil, name, FA_READ);
-	  if (fres != FR_OK) {
-		while(1);
-	  }
-
-	  //We can either use f_read OR f_gets to get data out of files
-	  //f_gets is a wrapper on f_read that does some string formatting for us
-	  UINT bytesRead = 0;
-	  FRESULT rres = f_read(&fil, readBuf, CHUNK_SIZE, &bytesRead);
-	  if(rres != 0) {
-		HAL_Delay(100);
-	  }
-
-	  //Be a tidy kiwi - don't forget to close your file!
-	  f_close(&fil);
-
-	  // fill the entire buffer to start
-	//  HAL_DAC_Start(&hdac1, DAC_CHANNEL_1);
-	  HAL_DAC_Start_DMA(&hdac1, DAC_CHANNEL_1, (uint32_t*)readBuf, CHUNK_SIZE, DAC_ALIGN_8B_R);
-	  HAL_TIM_Base_Start(&htim2);
-}
 
 char MIDI_Play() {
 	char keyPressed;
@@ -179,37 +120,37 @@ char MIDI_Play() {
 
     switch(keyPressed) {
     	case '1':
-    		play_sound_byte("boom.raw");
+    		play_sound_byte("boom.raw", &hdac1, &htim2);
     	case '2':
-    		play_sound_byte("boom.raw");
+    		play_sound_byte("boom.raw", &hdac1, &htim2);
     	case '3':
-    		play_sound_byte("boom.raw");
+    		play_sound_byte("boom.raw", &hdac1, &htim2);
     	case 'A':
-    		play_sound_byte("boom.raw");
+    		play_sound_byte("boom.raw", &hdac1, &htim2);
     	case '4':
-    		play_sound_byte("boom.raw");
+    		play_sound_byte("boom.raw", &hdac1, &htim2);
     	case '5':
-    		play_sound_byte("boom.raw");
+    		play_sound_byte("boom.raw", &hdac1, &htim2);
     	case '6':
-    		play_sound_byte("boom.raw");
+    		play_sound_byte("boom.raw", &hdac1, &htim2);
     	case 'B':
-    		play_sound_byte("boom.raw");
+    		play_sound_byte("boom.raw", &hdac1, &htim2);
     	case '7':
-    		play_sound_byte("boom.raw");
+    		play_sound_byte("boom.raw", &hdac1, &htim2);
     	case '8':
-    		play_sound_byte("boom.raw");
+    		play_sound_byte("boom.raw", &hdac1, &htim2);
     	case '9':
-    		play_sound_byte("boom.raw");
+    		play_sound_byte("boom.raw", &hdac1, &htim2);
     	case 'C':
-    		play_sound_byte("boom.raw");
+    		play_sound_byte("boom.raw", &hdac1, &htim2);
     	case '*':
-    		play_sound_byte("boom.raw");
+    		play_sound_byte("boom.raw", &hdac1, &htim2);
     	case '0':
-    		play_sound_byte("boom.raw");
+    		play_sound_byte("boom.raw", &hdac1, &htim2);
     	case '#':
-    		play_sound_byte("boom.raw");
+    		play_sound_byte("boom.raw", &hdac1, &htim2);
     	case 'D':
-    		play_sound_byte("boom.raw");
+    		play_sound_byte("boom.raw", &hdac1, &htim2);
     }
 
     return 0; // no key pressed

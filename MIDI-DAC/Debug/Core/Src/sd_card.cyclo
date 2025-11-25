@@ -1,0 +1,2 @@
+../Core/Src/sd_card.c:13:6:play_sound_byte	1
+../Core/Src/sd_card.c:54:6:read_sound_file	1
