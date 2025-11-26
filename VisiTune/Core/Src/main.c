@@ -35,60 +35,6 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
-#define PKT_SYNC_SIZE    2   // 0xA5, 0x5A
-#define PKT_HEADER_SIZE  (sizeof(pkt_header_t))  // 7 bytes (packed)
-#define PKT_PREFIX_SIZE  (PKT_SYNC_SIZE + PKT_HEADER_SIZE) // 9 bytes before payload
-#define PKT_CRC_SIZE     2
-
-#define UART_ACK_HEADER  'H'
-#define UART_ACK_OK      'S'
-#define UART_ACK_ERR     'E'
-#define UART_ACK_NEXT_AUDIO_CHUNK 'A'
-
-// Packet size/overhead (must match Python script)
-#define PKT_OVERHEAD     (PKT_SYNC_SIZE + PKT_HEADER_SIZE + PKT_CRC_SIZE) // 11
-#define PKT_MAX_SIZE     0xFFFFu  // total packet: sync+header+payload+CRC
-
-#define IMG_PKT_MAX_SIZE     PKT_MAX_SIZE
-#define AUD_PKT_MAX_SIZE     PKT_MAX_SIZE
-
-#define IMG_MAX_PAYLOAD_BYTES  (IMG_PKT_MAX_SIZE - PKT_OVERHEAD)
-#define AUD_MAX_PAYLOAD_BYTES  (AUD_PKT_MAX_SIZE - PKT_OVERHEAD)
-
-// DAC circular buffer: 2 halves, each half holds one max audio payload worth of samples
-// 2 bytes per 16-bit PCM sample => samples = bytes/2
-#define DAC_HALF_SAMPLES   (AUD_MAX_PAYLOAD_BYTES / 2u)
-#define DAC_BUF_SAMPLES    (2u * DAC_HALF_SAMPLES)
-/* USER CODE END PD */
-
-/* Private macro -------------------------------------------------------------*/
-/* USER CODE BEGIN PM */
-
-/* USER CODE END PM */
-
-/* Private variables ---------------------------------------------------------*/
-ADC_HandleTypeDef hadc1;
-DMA_HandleTypeDef hdma_adc1;
-
-DAC_HandleTypeDef hdac1;
-DMA_HandleTypeDef hdma_dac1_ch1;
-
-UART_HandleTypeDef hlpuart1;
-DMA_HandleTypeDef hdma_lpuart1_rx;
-
-SPI_HandleTypeDef hspi1;
-
-TIM_HandleTypeDef htim1;
-TIM_HandleTypeDef htim2;
-TIM_HandleTypeDef htim3;
-
-/* USER CODE BEGIN PV */
-
-// ADC declarations
-uint16_t adc_buf[4];
-uint8_t rewind_flag = 0;
-uint8_t pause_state = 0;
-uint8_t forward_flag = 0;
 
 		#define PKT_SYNC_SIZE    2   // 0xA5, 0x5A
 		#define PKT_HEADER_SIZE  (sizeof(pkt_header_t))  // 7 bytes (packed)
@@ -114,57 +60,99 @@ uint8_t forward_flag = 0;
 		// 2 bytes per 16-bit PCM sample => samples = bytes/2
 		#define DAC_HALF_SAMPLES   (AUD_MAX_PAYLOAD_BYTES / 2u)
 		#define DAC_BUF_SAMPLES    (2u * DAC_HALF_SAMPLES)
+/* USER CODE END PD */
 
-		// UART RX context
-	typedef enum {
-		RX_STATE_WAIT_PREFIX,   // waiting for 2 sync + 7 header bytes
-		RX_STATE_WAIT_PAYLOAD,  // waiting for payload (image or audio)
-		RX_STATE_WAIT_CRC       // waiting for audio CRC (2 bytes)
-	} uart_rx_state_t;
+/* Private macro -------------------------------------------------------------*/
+/* USER CODE BEGIN PM */
 
+/* USER CODE END PM */
 
-		typedef struct {
-			uart_rx_state_t state;
-			uint8_t  prefix_buf[PKT_PREFIX_SIZE];  // 9 bytes: sync + header
-			pkt_header_t header;
-			uint16_t payload_len;
-			uint8_t *payload_dst;                  // destination buffer for payload+CRC
-		} uart_rx_ctx_t;
+/* Private variables ---------------------------------------------------------*/
+ADC_HandleTypeDef hadc1;
+DMA_HandleTypeDef hdma_adc1;
 
-		uart_rx_ctx_t g_uart_rx;
+DAC_HandleTypeDef hdac1;
+DMA_HandleTypeDef hdma_dac1_ch1;
 
-		// Buffers
-		uint16_t dac_buf[DAC_BUF_SAMPLES];  // DAC circular buffer
+UART_HandleTypeDef hlpuart1;
+DMA_HandleTypeDef hdma_lpuart1_rx;
 
-		uint8_t image_pkt_buf[IMG_MAX_PAYLOAD_BYTES + PKT_CRC_SIZE];
+SPI_HandleTypeDef hspi1;
 
-		// Audio RX views onto dac_buf halves
-		uint8_t *audio_pkt_buf0 = (uint8_t *)dac_buf;                      // first half
-		uint8_t *audio_pkt_buf1 = (uint8_t *)&dac_buf[DAC_HALF_SAMPLES];   // second half
+TIM_HandleTypeDef htim1;
+TIM_HandleTypeDef htim2;
 
-		// NEW: CRC storage for audio packets
-		uint8_t audio_crc_buf[PKT_CRC_SIZE];
+/* USER CODE BEGIN PV */
 
-		// Flags
-		volatile uint8_t  image_pkt_ready = 0;
-		volatile uint16_t image_pkt_len   = 0;
+// ADC declarations
+uint16_t adc_buf[4];
+uint8_t rewind_flag = 0;
+uint8_t pause_state = 0;
+uint8_t forward_flag = 0;
 
-		volatile uint8_t  audio_pkt_ready = 0;
-		volatile uint8_t  audio_write_idx = 0;   // 0 or 1
-		volatile uint16_t audio_pkt_len   = 0;
+// keypad
+char keyPress;
 
-		// Which halves of dac_buf are free to write into
-		volatile uint8_t half0_free = 1;  // dac_buf[0 .. DAC_HALF_SAMPLES-1]
-		volatile uint8_t half1_free = 1;  // dac_buf[DAC_HALF_SAMPLES .. end]
+// UART RX context
+typedef enum {
+RX_STATE_WAIT_PREFIX,   // waiting for 2 sync + 7 header bytes
+RX_STATE_WAIT_PAYLOAD,  // waiting for payload (image or audio)
+RX_STATE_WAIT_CRC       // waiting for audio CRC (2 bytes)
+} uart_rx_state_t;
 
 
+typedef struct {
+	uart_rx_state_t state;
+	uint8_t  prefix_buf[PKT_PREFIX_SIZE];  // 9 bytes: sync + header
+	pkt_header_t header;
+	uint16_t payload_len;
+	uint8_t *payload_dst;                  // destination buffer for payload+CRC
+} uart_rx_ctx_t;
+
+uart_rx_ctx_t g_uart_rx;
+
+// Buffers
+uint16_t dac_buf[DAC_BUF_SAMPLES];  // DAC circular buffer
+
+uint8_t image_pkt_buf[IMG_MAX_PAYLOAD_BYTES + PKT_CRC_SIZE];
+
+// Audio RX views onto dac_buf halves
+uint8_t *audio_pkt_buf0 = (uint8_t *)dac_buf;                      // first half
+uint8_t *audio_pkt_buf1 = (uint8_t *)&dac_buf[DAC_HALF_SAMPLES];   // second half
+
+// NEW: CRC storage for audio packets
+uint8_t audio_crc_buf[PKT_CRC_SIZE];
+
+// Flags
+volatile uint8_t  image_pkt_ready = 0;
+volatile uint16_t image_pkt_len   = 0;
+
+volatile uint8_t  audio_pkt_ready = 0;
+volatile uint8_t  audio_write_idx = 0;   // 0 or 1
+volatile uint16_t audio_pkt_len   = 0;
+
+// Which halves of dac_buf are free to write into
+volatile uint8_t half0_free = 1;  // dac_buf[0 .. DAC_HALF_SAMPLES-1]
+volatile uint8_t half1_free = 1;  // dac_buf[DAC_HALF_SAMPLES .. end]
+
+volatile uint8_t audio_stream_active = 0;
+
+// Stream state for DAC priming
+volatile uint8_t dac_running       = 0;  // 0 = DAC DMA stopped, 1 = running
+volatile uint8_t audio_prime_count = 0;  // how many good packets we've accepted this stream
 
 
-		//CODE FOR FILTERING
-		//LOW PASS
-		//#define FIR_TAPS 74
-		//arm_fir_instance_q15 fir_low;
-		//q15_t firState_low[FIR_TAPS + DAC_HALF_SAMPLES - 1];
+
+volatile uint16_t ctrl_pkt_len   = 0;
+volatile uint8_t ctrl_pkt_ready = 0;
+uint8_t ctrl_buf[16];
+
+
+//CODE FOR FILTERING
+//LOW PASS
+//#define FIR_TAPS 74
+//arm_fir_instance_q15 fir_low;
+//q15_t firState_low[FIR_TAPS + DAC_HALF_SAMPLES - 1];
 //		q15_t firCoeffs_low[74] = {
 //		      -6,   -9,  -12,  -15,
 //		     -19,  -22,  -25,  -26,
@@ -188,11 +176,11 @@ uint8_t forward_flag = 0;
 //		};
 //
 //		q15_t filter_buf_low[DAC_HALF_SAMPLES];
-		//END LOW PASS
+//END LOW PASS
 
-		//arm_fir_instance_q15 fir_high;
-		//q15_t firState_high[FIR_TAPS + DAC_HALF_SAMPLES - 1];
-		//q15_t firCoeffs_high[74] = {
+//arm_fir_instance_q15 fir_high;
+//q15_t firState_high[FIR_TAPS + DAC_HALF_SAMPLES - 1];
+//q15_t firCoeffs_high[74] = {
 //		       0,   -4,  -10,  -16,
 //		     -22,  -23,  -18,   -4,
 //		      17,   45,   73,   94,
@@ -214,17 +202,17 @@ uint8_t forward_flag = 0;
 //		     -10,   -4
 //		};
 //
-		q15_t filter_buf[DAC_HALF_SAMPLES];
-		#define FFT_SIZE 1024
-		#define FFT_INCREMENT (FFT_SIZE / 2)
+q15_t filter_buf[DAC_HALF_SAMPLES];
+#define FFT_SIZE 1024
+#define FFT_INCREMENT (FFT_SIZE / 2)
 
-		float32_t fft_in[FFT_SIZE];
-		float32_t fft_out[FFT_SIZE];
-		float32_t overlap[FFT_INCREMENT];
-		static float32_t window[FFT_SIZE];
-		q15_t debug_out_buffer[DAC_HALF_SAMPLES];
+float32_t fft_in[FFT_SIZE];
+float32_t fft_out[FFT_SIZE];
+float32_t overlap[FFT_INCREMENT];
+static float32_t window[FFT_SIZE];
+q15_t debug_out_buffer[DAC_HALF_SAMPLES];
 
-		arm_rfft_fast_instance_f32 rfft;
+arm_rfft_fast_instance_f32 rfft;
 
 
 		//END FILTERING
@@ -240,15 +228,28 @@ static void MX_LPUART1_UART_Init(void);
 static void MX_DAC1_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_ADC1_Init(void);
-static void MX_TIM3_Init(void);
 /* USER CODE BEGIN PFP */
 static void uart_start_header_rx(void);
 void processFFT(const q15_t* in, q15_t* out, uint16_t num_samples);
+void ADC_ReadAll_Polling(void);
 
+static void protocol_soft_reset(void);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
+
+void ADC_ReadAll_Polling(void)
+{
+  	HAL_ADC_Start(&hadc1);
+    for (int i = 0; i < 4; i++)
+    {
+        if (HAL_ADC_PollForConversion(&hadc1, 5) == HAL_OK)
+        {
+            adc_buf[i] = HAL_ADC_GetValue(&hadc1);
+        }
+    }
+}
 void processFFT(const q15_t* in, q15_t* out, uint16_t num_samples) {
 	uint32_t pos = 0;
 	while ((pos + FFT_INCREMENT) <= num_samples) {
@@ -262,24 +263,32 @@ void processFFT(const q15_t* in, q15_t* out, uint16_t num_samples) {
 
 		arm_rfft_fast_f32(&rfft, fft_in, fft_out, 0);
 
-		int low_bin = 15;
-		int high_bin = 450;
-		float32_t lowShelfGain = 3.5f;
-		//for (int b = cutoff_bin; b < FFT_INCREMENT; b++) {
-		//	fft_out[b*2]   = 0.0f;
-		//    fft_out[b*2+1] = 0.0f;
-		//}
+		int low_bin = 40;
+		int high_bin = 90;
+		//determine lowShelfGain (tied to adc_buf[0]
+		uint32_t dial0 = adc_buf[0];
+		if (dial0 < 15) dial0 = 0;
+		if (dial0 > 4000) dial0 = 4000;
+		uint32_t dial1 = adc_buf[1];
+		if (dial1 < 15) dial1 = 0;
+		if (dial1 > 4000) dial1 = 4000;
+		float32_t lowShelfGain = (dial0 * 1.0)/2000 * 1.0f;
+		float32_t highShelfGain = (dial1 * 1.0)/2000 * 1.0f;
+
 		for (int b = 0; b < low_bin; b++) {
-			float32_t weight = lowShelfGain +
-			                       (1.0f - lowShelfGain) * ((float)b / low_bin);
+			float32_t t = (float)b / (float)low_bin; // 0..1
+			float32_t weight = lowShelfGain + (1.0f - lowShelfGain) * t;
 			fft_out[b*2] *= weight;
 			fft_out[b*2+1] *= weight;
 		}
 
-
 		for (int b = low_bin; b < high_bin; b++) {
-			fft_out[b*2] *= 0.0f;
-			fft_out[b*2] *= 0.0f;
+//			float32_t t = (float)(b - high_bin) / (float)((300 - high_bin) - 1); // 0..1
+//			float32_t weight = 1.0f + (highShelfGain - 1.0f) * t;
+			float32_t t = (float)b / (float)low_bin; // 0..1
+			float32_t weight = highShelfGain + (1.0f - highShelfGain) * t;
+			fft_out[b*2] *= weight;
+			fft_out[b*2+1] *= weight;
 		}
 
 		arm_rfft_fast_f32(&rfft, fft_out, fft_in, 1);
@@ -292,8 +301,8 @@ void processFFT(const q15_t* in, q15_t* out, uint16_t num_samples) {
 
 		for (int i = 0; i < FFT_INCREMENT && pos + i < num_samples; i++) {
 			float32_t x = fft_in[i];
-			if (x > 1.0f) x = 1.0f;
-			if (x < -1.0f) x = -1.0f;
+			if (x > 0.8f) x = 0.8f; //used to be 1.0
+			if (x < -0.8f) x = -0.8f; //same
 			out[pos + i] = (int16_t)(x * 32767.0f);
 		}
 
@@ -303,12 +312,74 @@ void processFFT(const q15_t* in, q15_t* out, uint16_t num_samples) {
 
 		pos += FFT_INCREMENT;
 	}
-	//for (uint32_t i = 0; i < num_samples; i++) {
-	//    debug_out_buffer[i] = out[i];
-	//}
-	//int bruhhhh = 0;
 }
 
+char read_keypad() {
+	// Row pins
+	GPIO_TypeDef* ROW_PORT[4] = {Row_1_GPIO_Port, Row_2_GPIO_Port, Row_3_GPIO_Port, Row_4_GPIO_Port};
+	uint16_t      ROW_PIN[4]  = {Row_1_Pin,       Row_2_Pin,       Row_3_Pin,       Row_4_Pin};
+
+	// Col pins
+	GPIO_TypeDef* COL_PORT[4] = {Col_1_GPIO_Port, Col_2_GPIO_Port, Col_3_GPIO_Port, Col_4_GPIO_Port};
+	uint16_t     COL_PIN[4]  = {Col_1_Pin,       Col_2_Pin,       Col_3_Pin,       Col_4_Pin};
+
+	// Key map (customize to your keypad)
+	char KEY_MAP[4][4] =
+	{
+		{'1','2','3','A'},
+		{'4','5','6','B'},
+		{'7','8','9','C'},
+		{'*','0','#','D'}
+	};
+
+	for (int c = 0; c < 4; c++)
+	{
+		// Drive all columns HIGH
+		for (int i = 0; i < 4; i++)
+			HAL_GPIO_WritePin(COL_PORT[i], COL_PIN[i], GPIO_PIN_SET);
+
+		// Drive only this column LOW
+		HAL_GPIO_WritePin(COL_PORT[c], COL_PIN[c], GPIO_PIN_RESET);
+
+		HAL_Delay(1); // settle time
+
+		// Read each row
+		for (int r = 0; r < 4; r++)
+		{
+			if (HAL_GPIO_ReadPin(ROW_PORT[r], ROW_PIN[r]) == GPIO_PIN_RESET)
+			{
+				HAL_Delay(20);   // debounce
+				if (HAL_GPIO_ReadPin(ROW_PORT[r], ROW_PIN[r]) == GPIO_PIN_RESET)
+					return KEY_MAP[r][c];
+			}
+		}
+	}
+
+	return 0;
+}
+
+
+	static void protocol_soft_reset(void)
+	{
+		__disable_irq();
+		HAL_UART_AbortReceive(&hlpuart1);
+		g_uart_rx.state       = RX_STATE_WAIT_PREFIX;
+		g_uart_rx.payload_len = 0;
+		g_uart_rx.payload_dst = NULL;
+
+		image_pkt_ready = 0;
+		image_pkt_len   = 0;
+		audio_pkt_ready = 0;
+		audio_pkt_len   = 0;
+
+		half0_free = 1;
+		half1_free = 1;
+		audio_stream_active = 0;
+		audio_prime_count   = 0;  // NEW: reset priming
+		__enable_irq();
+
+		uart_start_header_rx();
+	}
 
 /* USER CODE END 0 */
 
@@ -348,7 +419,6 @@ int main(void)
   MX_DAC1_Init();
   MX_TIM2_Init();
   MX_ADC1_Init();
-  MX_TIM3_Init();
   /* USER CODE BEGIN 2 */
 //  tft_init();
 //  tft_fill_rect(0, 0, 480, 320, 0xAAAA);
@@ -356,8 +426,6 @@ int main(void)
 
   // Start the ADC reads for the potentiometers and sliders
   HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
-  HAL_ADC_Start_DMA(&hadc1, adc_buf, 4);
-  HAL_TIM_Base_Start(&htim3); // Start the adc conversions
 
   // Receieve the header from UART
   uart_start_header_rx();
@@ -370,16 +438,13 @@ int main(void)
       dac_buf[i] = 2048; // mid-scale for 12-bit
   }
 
-
-
-  /* Start DAC in circular DMA mode over dac_buf */
-  if (HAL_DAC_Start_DMA(&hdac1,
-                        DAC_CHANNEL_1,
-                        (uint32_t *)dac_buf,
-                        DAC_BUF_SAMPLES,
-                        DAC_ALIGN_12B_R) != HAL_OK) {
-      Error_Handler();
-  }
+  /* Do NOT start DAC DMA here.
+   * We'll start it after we've "primed" the buffer with at least
+   * two good audio packets of a new stream.
+   */
+  dac_running       = 0;
+  audio_prime_count = 0;
+  audio_stream_active = 0;
 
   //INIT FIR
   arm_rfft_fast_init_f32(&rfft, FFT_SIZE);
@@ -397,6 +462,8 @@ int main(void)
 //    }
   //END INIT FIR
 
+  HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
+
 
   /* USER CODE END 2 */
 
@@ -406,28 +473,87 @@ int main(void)
 
   while (1)
   {
+    keyPress = read_keypad();
+	ADC_ReadAll_Polling();
+
+	  if (ctrl_pkt_ready) {
+	          ctrl_pkt_ready = 0;
+	          uint8_t cmd = ctrl_buf[0];
+
+	          if (cmd == CTRL_CMD_AUDIO_STOP) {
+	              __disable_irq();
+	              audio_stream_active = 0;
+
+	              // Drop any pending audio packet in-flight
+	              audio_pkt_ready = 0;
+	              audio_pkt_len   = 0;
+
+	              // Release both halves so future streams start clean
+	              half0_free = 1;
+	              half1_free = 1;
+
+	              // Reset priming state
+	              audio_prime_count = 0;
+
+	              __enable_irq();
+
+	              // Stop DAC DMA if it was running
+	              if (dac_running) {
+	                  HAL_DAC_Stop_DMA(&hdac1, DAC_CHANNEL_1);
+	                  dac_running = 0;
+	              }
+
+	              // Fill DAC buffer with silence
+	              for (uint32_t i = 0; i < DAC_BUF_SAMPLES; ++i) {
+	                  dac_buf[i] = 2048;
+	              }
+
+	              uint8_t ack = UART_ACK_OK; // 'S'
+	              HAL_UART_Transmit(&hlpuart1, &ack, 1, 10);
+
+	              // Re-arm header RX
+	              uart_start_header_rx();
+	          }
+
+	          // Skip directly to next loop iteration so we don't process audio
+	          // in the same pass after a STOP.
+	          continue;
+	      }
+
+
 	  // 1) Handle image packets
 	  if (image_pkt_ready) {
+	      uint16_t payload_len;
+	      uint8_t  hdr_bytes[CRC_HEADER_LEN];
+
 	      __disable_irq();
-	      uint16_t payload_len = image_pkt_len;   // bytes of image payload
-	      image_pkt_ready = 0;
+	      payload_len      = image_pkt_len;   // bytes of image payload
+	      image_pkt_ready  = 0;
+
+	      // Snapshot the header fields for this packet into hdr_bytes[0..6]
+	      hdr_bytes[0] = g_uart_rx.header.version;
+	      hdr_bytes[1] = g_uart_rx.header.data_type;
+	      hdr_bytes[2] = g_uart_rx.header.flags;
+	      hdr_bytes[3] = (uint8_t)(g_uart_rx.header.seq >> 8);
+	      hdr_bytes[4] = (uint8_t)(g_uart_rx.header.seq & 0xFF);
+	      hdr_bytes[5] = (uint8_t)(g_uart_rx.header.len >> 8);
+	      hdr_bytes[6] = (uint8_t)(g_uart_rx.header.len & 0xFF);
 	      __enable_irq();
 
-	      if (payload_len  <= sizeof(image_pkt_buf)) {
+	      if (payload_len <= sizeof(image_pkt_buf)) {
 
 	          uint16_t recv_crc =
 	              ((uint16_t)image_pkt_buf[payload_len] << 8) |
 	               (uint16_t)image_pkt_buf[payload_len + 1];
 
-	          uint16_t calc_crc = crc16_ccitt(&g_uart_rx.prefix_buf[2], image_pkt_buf, payload_len);
+	          // Use the *snapshotted* header bytes, not prefix_buf
+	          uint16_t calc_crc = crc16_ccitt(hdr_bytes, image_pkt_buf, payload_len);
 
 	          if (calc_crc != recv_crc) {
 	              uint8_t nack = UART_ACK_ERR;
 	              HAL_UART_Transmit(&hlpuart1, &nack, 1, 10);
 	          } else {
-	              // Example: full-frame 480x320 RGB565
-	        	  parse_and_apply_image_packet(image_pkt_buf, payload_len);
-	              // else: decode according to your actual format.
+	              parse_and_apply_image_packet(image_pkt_buf, payload_len);
 
 	              uint8_t ack = UART_ACK_OK;
 	              HAL_UART_Transmit(&hlpuart1, &ack, 1, 10);
@@ -438,20 +564,40 @@ int main(void)
 	      }
 	  }
 
-
 		  // 2) Handle audio packets (fill halves of dac_buf, DAC runs continuously)
       // 2) Handle audio packets (convert in-place in dac_buf, DAC runs continuously)
 	  if (audio_pkt_ready) {
+	      uint8_t  idx;
+	      uint16_t payload_len;
+	      uint8_t  hdr_bytes[CRC_HEADER_LEN];
+	      uint8_t  send_manual_A = 0;  // whether to send 'A' after ACK (priming)
+
 	      __disable_irq();
-	      uint8_t  idx         = audio_write_idx;  // 0 or 1
-	      uint16_t payload_len = audio_pkt_len;    // bytes of audio payload
+	      idx             = audio_write_idx;   // 0 or 1
+	      payload_len     = audio_pkt_len;     // bytes of audio payload
 	      audio_pkt_ready = 0;
+
+	      // Snapshot header into hdr_bytes
+	      hdr_bytes[0] = g_uart_rx.header.version;
+	      hdr_bytes[1] = g_uart_rx.header.data_type;
+	      hdr_bytes[2] = g_uart_rx.header.flags;
+	      hdr_bytes[3] = (uint8_t)(g_uart_rx.header.seq >> 8);
+	      hdr_bytes[4] = (uint8_t)(g_uart_rx.header.seq & 0xFF);
+	      hdr_bytes[5] = (uint8_t)(g_uart_rx.header.len >> 8);
+	      hdr_bytes[6] = (uint8_t)(g_uart_rx.header.len & 0xFF);
 	      __enable_irq();
 
-	      // Sanity-check payload length vs half-buffer size
+	      // Sanity-check payload length vs max audio payload
 	      if (payload_len > AUD_MAX_PAYLOAD_BYTES) {
+	          // free the reserved half so we don't leak it
+	          if (idx == 0) half0_free = 1;
+	          else          half1_free = 1;
+
 	          uint8_t nack = UART_ACK_ERR;
 	          HAL_UART_Transmit(&hlpuart1, &nack, 1, 10);
+
+	          // Now ready to receive the next header
+	          uart_start_header_rx();
 	          continue;
 	      }
 
@@ -467,13 +613,21 @@ int main(void)
 	          : &dac_buf[DAC_HALF_SAMPLES]
 	      );
 
-	      uint16_t calc_crc = crc16_ccitt(&g_uart_rx.prefix_buf[2],
+	      // Use snapshotted header, not prefix_buf
+	      uint16_t calc_crc = crc16_ccitt(hdr_bytes,
 	                                      payload_bytes,
 	                                      payload_len);
 
 	      if (calc_crc != recv_crc) {
+	          // free the half so we can reuse it
+	          if (idx == 0) half0_free = 1;
+	          else          half1_free = 1;
+
 	          uint8_t nack = UART_ACK_ERR;
 	          HAL_UART_Transmit(&hlpuart1, &nack, 1, 10);
+
+	          // Re-arm header RX
+	          uart_start_header_rx();
 	          continue;
 	      }
 
@@ -483,17 +637,13 @@ int main(void)
 	          num_samples = DAC_HALF_SAMPLES;
 	      }
 
-	      int16_t  *src = (int16_t *)payload_bytes;        // signed PCM
-	      uint16_t *dst = (uint16_t *)payload_bytes;       // same locations for DAC
+	      int16_t  *src = (int16_t *)payload_bytes;  // signed PCM
+	      uint16_t *dst = (uint16_t *)payload_bytes; // same locations for DAC
 
-	      //arm_fir_fast_q15(&fir_low, src, filter_buf_low, DAC_HALF_SAMPLES);
-	      //arm_fir_fast_q15(&fir_high, src, filter_buf_high, DAC_HALF_SAMPLES);
+        processFFT(src, filter_buf, num_samples);
 
-	      processFFT(src, filter_buf, num_samples);
-
-	      //Below translates src into the dst. Our goal is to turn src into the output of the FFT
 	      for (uint16_t i = 0; i < num_samples; ++i) {
-	          int32_t s = src[i];      // -32768..32767
+	          int32_t s = filter_buf[i];      // -32768..32767
 	          s += 32768;              // 0..65535
 	          if (s < 0)      s = 0;
 	          if (s > 65535)  s = 65535;
@@ -505,16 +655,56 @@ int main(void)
 	          dst[i] = 2048;
 	      }
 
-	      //dst[i] should be what we're outputting, here is where we'll mess with it
+	      // ---- Priming / DAC-start logic ----
+	      // If DAC is not running yet, we are in "priming" mode.
+	      if (!dac_running) {
+	          audio_prime_count++;
 
+	          if (audio_prime_count == 1) {
+	              // First good packet of this stream:
+	              // we want the PC to send the 2nd packet immediately,
+	              // even though the DAC isn't running yet.
+	              send_manual_A = 1;
+	          }
+	          else if (audio_prime_count == 2) {
+	              // Second good packet: we now have two halves filled,
+	              // so it's safe to start DAC DMA over the full buffer.
+	              if (HAL_DAC_Start_DMA(&hdac1,
+	                                    DAC_CHANNEL_1,
+	                                    (uint32_t *)dac_buf,
+	                                    DAC_BUF_SAMPLES,
+	                                    DAC_ALIGN_12B_R) != HAL_OK) {
+	                  Error_Handler();
+	              }
+	              dac_running         = 1;
+	              audio_stream_active = 1;
+	          }
+	      } else {
+	          // Already running: just keep stream_active unless this is LAST
+	          if (!(hdr_bytes[2] & PKT_FLAG_LAST)) {
+	              audio_stream_active = 1;
+	          }
+	      }
+
+	      // If this packet is marked LAST, stop requesting future audio.
+	      if (hdr_bytes[2] & PKT_FLAG_LAST) {
+	          audio_stream_active = 0;
+	      }
 
 	      // Tell PC this packet was accepted and written into that half
 	      uint8_t ack = UART_ACK_OK;
 	      HAL_UART_Transmit(&hlpuart1, &ack, 1, 10);
+
+	      // If we are in priming and just finished the first packet,
+	      // trigger the PC to send the next chunk immediately.
+	      if (send_manual_A) {
+	          uint8_t req = UART_ACK_NEXT_AUDIO_CHUNK; // 'A'
+	          HAL_UART_Transmit(&hlpuart1, &req, 1, 10);
+	      }
+
+	      // NOW re-arm UART to receive the next header
+	      uart_start_header_rx();
 	  }
-
-
-
 
     /* USER CODE END WHILE */
 
@@ -599,12 +789,12 @@ static void MX_ADC1_Init(void)
   hadc1.Init.ScanConvMode = ADC_SCAN_ENABLE;
   hadc1.Init.EOCSelection = ADC_EOC_SINGLE_CONV;
   hadc1.Init.LowPowerAutoWait = DISABLE;
-  hadc1.Init.ContinuousConvMode = ENABLE;
+  hadc1.Init.ContinuousConvMode = DISABLE;
   hadc1.Init.NbrOfConversion = 4;
   hadc1.Init.DiscontinuousConvMode = DISABLE;
-  hadc1.Init.ExternalTrigConv = ADC_EXTERNALTRIG_T3_TRGO;
-  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_RISING;
-  hadc1.Init.DMAContinuousRequests = ENABLE;
+  hadc1.Init.ExternalTrigConv = ADC_SOFTWARE_START;
+  hadc1.Init.ExternalTrigConvEdge = ADC_EXTERNALTRIGCONVEDGE_NONE;
+  hadc1.Init.DMAContinuousRequests = DISABLE;
   hadc1.Init.Overrun = ADC_OVR_DATA_PRESERVED;
   hadc1.Init.OversamplingMode = DISABLE;
   if (HAL_ADC_Init(&hadc1) != HAL_OK)
@@ -616,7 +806,7 @@ static void MX_ADC1_Init(void)
   */
   sConfig.Channel = ADC_CHANNEL_5;
   sConfig.Rank = ADC_REGULAR_RANK_1;
-  sConfig.SamplingTime = ADC_SAMPLETIME_47CYCLES_5;
+  sConfig.SamplingTime = ADC_SAMPLETIME_247CYCLES_5;
   sConfig.SingleDiff = ADC_SINGLE_ENDED;
   sConfig.OffsetNumber = ADC_OFFSET_NONE;
   sConfig.Offset = 0;
@@ -857,7 +1047,7 @@ static void MX_TIM2_Init(void)
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 0;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 3749;
+  htim2.Init.Period = 4999;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
@@ -878,51 +1068,6 @@ static void MX_TIM2_Init(void)
   /* USER CODE BEGIN TIM2_Init 2 */
 
   /* USER CODE END TIM2_Init 2 */
-
-}
-
-/**
-  * @brief TIM3 Initialization Function
-  * @param None
-  * @retval None
-  */
-static void MX_TIM3_Init(void)
-{
-
-  /* USER CODE BEGIN TIM3_Init 0 */
-
-  /* USER CODE END TIM3_Init 0 */
-
-  TIM_ClockConfigTypeDef sClockSourceConfig = {0};
-  TIM_MasterConfigTypeDef sMasterConfig = {0};
-
-  /* USER CODE BEGIN TIM3_Init 1 */
-
-  /* USER CODE END TIM3_Init 1 */
-  htim3.Instance = TIM3;
-  htim3.Init.Prescaler = 0;
-  htim3.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim3.Init.Period = 65535;
-  htim3.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
-  htim3.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
-  if (HAL_TIM_Base_Init(&htim3) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sClockSourceConfig.ClockSource = TIM_CLOCKSOURCE_INTERNAL;
-  if (HAL_TIM_ConfigClockSource(&htim3, &sClockSourceConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  sMasterConfig.MasterOutputTrigger = TIM_TRGO_UPDATE;
-  sMasterConfig.MasterSlaveMode = TIM_MASTERSLAVEMODE_DISABLE;
-  if (HAL_TIMEx_MasterConfigSynchronization(&htim3, &sMasterConfig) != HAL_OK)
-  {
-    Error_Handler();
-  }
-  /* USER CODE BEGIN TIM3_Init 2 */
-
-  /* USER CODE END TIM3_Init 2 */
 
 }
 
@@ -973,7 +1118,13 @@ static void MX_GPIO_Init(void)
   HAL_PWREx_EnableVddIO2();
 
   /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(GPIOF, Col_4_Pin|Col_3_Pin|Col_2_Pin, GPIO_PIN_SET);
+
+  /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6|GPIO_PIN_8|GPIO_PIN_9, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(Col_1_GPIO_Port, Col_1_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pins : PE2 PE3 */
   GPIO_InitStruct.Pin = GPIO_PIN_2|GPIO_PIN_3;
@@ -983,12 +1134,11 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Alternate = GPIO_AF13_SAI1;
   HAL_GPIO_Init(GPIOE, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PF0 PF1 PF2 */
-  GPIO_InitStruct.Pin = GPIO_PIN_0|GPIO_PIN_1|GPIO_PIN_2;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_OD;
+  /*Configure GPIO pins : Col_4_Pin Col_3_Pin Col_2_Pin */
+  GPIO_InitStruct.Pin = Col_4_Pin|Col_3_Pin|Col_2_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
-  GPIO_InitStruct.Alternate = GPIO_AF4_I2C2;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOF, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PF7 */
@@ -999,11 +1149,25 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Alternate = GPIO_AF13_SAI1;
   HAL_GPIO_Init(GPIOF, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PB2 PB6 */
-  GPIO_InitStruct.Pin = GPIO_PIN_2|GPIO_PIN_6;
-  GPIO_InitStruct.Mode = GPIO_MODE_ANALOG;
+  /*Configure GPIO pins : Row_1_Pin Row_2_Pin Row_3_Pin */
+  GPIO_InitStruct.Pin = Row_1_Pin|Row_2_Pin|Row_3_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PB0 */
+  GPIO_InitStruct.Pin = GPIO_PIN_0;
+  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  GPIO_InitStruct.Alternate = GPIO_AF2_TIM3;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : Row_4_Pin */
+  GPIO_InitStruct.Pin = Row_4_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLUP;
+  HAL_GPIO_Init(Row_4_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pin : REWIND_Pin */
   GPIO_InitStruct.Pin = REWIND_Pin;
@@ -1054,6 +1218,14 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : PC7 */
+  GPIO_InitStruct.Pin = GPIO_PIN_7;
+  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  GPIO_InitStruct.Alternate = GPIO_AF2_TIM3;
   HAL_GPIO_Init(GPIOC, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PA8 PA10 */
@@ -1109,6 +1281,13 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
   GPIO_InitStruct.Alternate = GPIO_AF6_SPI3;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
+
+  /*Configure GPIO pin : Col_1_Pin */
+  GPIO_InitStruct.Pin = Col_1_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
+  GPIO_InitStruct.Pull = GPIO_NOPULL;
+  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
+  HAL_GPIO_Init(Col_1_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PB8 PB9 */
   GPIO_InitStruct.Pin = GPIO_PIN_8|GPIO_PIN_9;
@@ -1181,155 +1360,196 @@ static void uart_start_header_rx(void)
 }
 
 
-void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
-{
-	if (huart->Instance != LPUART1)
-		return;
+	void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+	{
+	    if (huart->Instance != LPUART1)
+	        return;
 
-	if (g_uart_rx.state == RX_STATE_WAIT_PREFIX) {
-		// We just received sync + header (9 bytes)
-		uint8_t *buf = g_uart_rx.prefix_buf;
+	    if (g_uart_rx.state == RX_STATE_WAIT_PREFIX) {
+	        // We just received sync + header (9 bytes)
+	        uint8_t *buf = g_uart_rx.prefix_buf;
 
-		// 1) Check sync bytes
-		if (buf[0] != 0xA5 || buf[1] != 0x5A) {
-			uart_start_header_rx();
-			return;
-		}
+	        // 1) Check sync bytes
+	        if (buf[0] != 0xA5 || buf[1] != 0x5A) {
+	            uart_start_header_rx();
+	            return;
+	        }
 
-		// 2) Extract payload length
-		uint16_t payload_len = ((uint16_t)buf[7] << 8) | buf[8];
+	        // 2) Extract payload length
+	        uint16_t payload_len = ((uint16_t)buf[7] << 8) | buf[8];
 
-		// 3) Parse header fields
-		g_uart_rx.header.version   = buf[2];
-		g_uart_rx.header.data_type = buf[3];
-		g_uart_rx.header.flags     = buf[4];
-		g_uart_rx.header.seq       = ((uint16_t)buf[5] << 8) | buf[6];
-		g_uart_rx.header.len       = payload_len;
-		g_uart_rx.payload_len      = payload_len;
+	        // 3) Parse header fields
+	        g_uart_rx.header.version   = buf[2];
+	        g_uart_rx.header.data_type = buf[3];
+	        g_uart_rx.header.flags     = buf[4];
+	        g_uart_rx.header.seq       = ((uint16_t)buf[5] << 8) | buf[6];
+	        g_uart_rx.header.len       = payload_len;
+	        g_uart_rx.payload_len      = payload_len;
 
-		// 4) Choose destination buffer based on packet type
-		switch (g_uart_rx.header.data_type) {
-		case PKT_DATA_IMAGE:
-			if (payload_len + PKT_CRC_SIZE > sizeof(image_pkt_buf)) {
-				uart_start_header_rx();
-				return;
-			}
-			g_uart_rx.payload_dst = image_pkt_buf;
-			break;
+	        // 4) Choose destination buffer based on packet type
+	        switch (g_uart_rx.header.data_type) {
+	        case PKT_DATA_IMAGE:
+	            if (payload_len + PKT_CRC_SIZE > sizeof(image_pkt_buf)) {
+	                uart_start_header_rx();
+	                return;
+	            }
+	            g_uart_rx.payload_dst = image_pkt_buf;
+	            break;
 
-		case PKT_DATA_AUDIO:
-			// Sanity-check payload length in BYTES (just payload, *not* CRC)
-			if (payload_len > AUD_MAX_PAYLOAD_BYTES) {
-				uart_start_header_rx();
-				return;
-			}
+	        case PKT_DATA_AUDIO:
+	            // Sanity-check payload length in BYTES (just payload, *not* CRC)
+	            if (payload_len > AUD_MAX_PAYLOAD_BYTES) {
+	                uart_start_header_rx();
+	                return;
+	            }
 
-			// Choose a free half of dac_buf as DMA destination for the *payload*
-			if (half0_free) {
-				g_uart_rx.payload_dst = audio_pkt_buf0; // first half of dac_buf
-				audio_write_idx = 0;
-				half0_free = 0;  // now reserved
-			} else if (half1_free) {
-				g_uart_rx.payload_dst = audio_pkt_buf1; // second half of dac_buf
-				audio_write_idx = 1;
-				half1_free = 0;  // now reserved
-			} else {
-				// No free half; can't accept this packet safely
-				uart_start_header_rx();
-				return;
-			}
-			break;
+	            // Choose a free half of dac_buf as DMA destination for the *payload*
+	            if (half0_free) {
+	                g_uart_rx.payload_dst = audio_pkt_buf0; // first half of dac_buf
+	                audio_write_idx = 0;
+	                half0_free = 0;  // now reserved
+	            } else if (half1_free) {
+	                g_uart_rx.payload_dst = audio_pkt_buf1; // second half of dac_buf
+	                audio_write_idx = 1;
+	                half1_free = 0;  // now reserved
+	            } else {
+	                // No free half; can't accept this packet safely
+	                uart_start_header_rx();
+	                return;
+	            }
+	            break;
 
-
-		default:
-			// Unknown type -> ignore this frame
-			uart_start_header_rx();
-			return;
-		}
-
-		// 5) Set state and start DMA for payload + CRC
-		g_uart_rx.state = RX_STATE_WAIT_PAYLOAD;
-
-		if (g_uart_rx.header.data_type == PKT_DATA_IMAGE) {
-			// Image: payload + CRC in one shot, as before
-			HAL_UART_Receive_DMA(&hlpuart1,
-								 g_uart_rx.payload_dst,
-								 payload_len + PKT_CRC_SIZE);
-		} else {
-			// Audio: ONLY the payload goes into dac_buf
-			HAL_UART_Receive_DMA(&hlpuart1,
-								 g_uart_rx.payload_dst,
-								 payload_len);
-		}
+	        case PKT_DATA_CMD:
+	            if (payload_len > sizeof(ctrl_buf)) {
+	                uart_start_header_rx();
+	                return;
+	            }
+	            g_uart_rx.payload_dst = ctrl_buf;
+	            break;
 
 
-		// 6) Tell PC "header OK, I'm ready for payload"
-		uint8_t ack_hdr = UART_ACK_HEADER;  // 'H'
-		HAL_UART_Transmit(&hlpuart1, &ack_hdr, 1, 10);
+
+	        default:
+	            // Unknown type -> ignore this frame
+	            uart_start_header_rx();
+	            return;
+	        }
+
+	        // 5) Set state and start DMA for payload + CRC
+	        g_uart_rx.state = RX_STATE_WAIT_PAYLOAD;
+
+	        if (g_uart_rx.header.data_type == PKT_DATA_IMAGE) {
+	            // Image: payload + CRC in one shot
+	            HAL_UART_Receive_DMA(&hlpuart1,
+	                                 g_uart_rx.payload_dst,
+	                                 payload_len + PKT_CRC_SIZE);
+	        }
+	        else if (g_uart_rx.header.data_type == PKT_DATA_AUDIO) {
+	            // Audio: ONLY the payload goes into dac_buf; CRC comes next in a tiny transfer
+	            HAL_UART_Receive_DMA(&hlpuart1,
+	                                 g_uart_rx.payload_dst,
+	                                 payload_len);
+	        }
+	        else if (g_uart_rx.header.data_type == PKT_DATA_CMD) {
+	            // Control: simplest is payload+CRC in one shot like image
+	            HAL_UART_Receive_DMA(&hlpuart1,
+	                                 g_uart_rx.payload_dst,
+	                                 payload_len + PKT_CRC_SIZE);
+	        }
+
+
+	        // 6) Tell PC "header OK, I'm ready for payload"
+	        uint8_t ack_hdr = UART_ACK_HEADER;  // 'H'
+	        HAL_UART_Transmit(&hlpuart1, &ack_hdr, 1, 10);
+	    }
+	    else if (g_uart_rx.state == RX_STATE_WAIT_PAYLOAD) {
+	        if (g_uart_rx.header.data_type == PKT_DATA_IMAGE) {
+	            // IMAGE: we already DMA'd payload+CRC into image_pkt_buf
+	            image_pkt_len   = g_uart_rx.payload_len;  // payload length (no CRC)
+	            image_pkt_ready = 1;
+
+	            // Back to waiting for next header
+	            uart_start_header_rx();
+	        }
+	        else if (g_uart_rx.header.data_type == PKT_DATA_AUDIO) {
+	            // AUDIO: we have JUST the payload in dac_buf now.
+	            // Next, we need to grab the 2 CRC bytes.
+
+	            g_uart_rx.state = RX_STATE_WAIT_CRC;
+
+	            // Start a tiny 2-byte DMA into audio_crc_buf
+	            HAL_UART_Receive_DMA(&hlpuart1,
+	                                 audio_crc_buf,
+	                                 PKT_CRC_SIZE);
+	            // Do NOT call uart_start_header_rx() yet; we still need CRC.
+	        }
+	        else if (g_uart_rx.header.data_type == PKT_DATA_CMD) {
+	            // CTRL: payload + CRC already in ctrl_buf
+	            ctrl_pkt_len   = g_uart_rx.payload_len;  // payload length (no CRC)
+	            ctrl_pkt_ready = 1;
+
+	            // Go back to waiting for next header
+	            uart_start_header_rx();
+	        }
+
+	    }
+	    else if (g_uart_rx.state == RX_STATE_WAIT_CRC) {
+	        // We just finished receiving the 2 CRC bytes for an audio packet
+	        if (g_uart_rx.header.data_type == PKT_DATA_AUDIO) {
+	            audio_pkt_len   = g_uart_rx.payload_len;  // just payload length
+	            audio_pkt_ready = 1;
+	        }
+
+	        // Do NOT start the next header RX here.
+	        // Just mark that we're logically back in WAIT_PREFIX;
+	        // the main loop will call uart_start_header_rx() once it
+	        // has validated this packet and sent 'S' or 'E'.
+	        g_uart_rx.state = RX_STATE_WAIT_PREFIX;
+	    }
+
+
+
 	}
-	else if (g_uart_rx.state == RX_STATE_WAIT_PAYLOAD) {
-		if (g_uart_rx.header.data_type == PKT_DATA_IMAGE) {
-			// IMAGE: we already DMA'd payload+CRC into image_pkt_buf
-			image_pkt_len   = g_uart_rx.payload_len;  // payload length (no CRC)
-			image_pkt_ready = 1;
 
-			// Back to waiting for next header
-			uart_start_header_rx();
-		}
-		else if (g_uart_rx.header.data_type == PKT_DATA_AUDIO) {
-			// AUDIO: we have JUST the payload in dac_buf now.
-			// Next, we need to grab the 2 CRC bytes.
+	void HAL_DAC_ConvHalfCpltCallbackCh1(DAC_HandleTypeDef *hdac)
+	{
+	    if (hdac->Instance != DAC1) return;
 
-			g_uart_rx.state = RX_STATE_WAIT_CRC;
+	    half0_free = 1;
 
-			// Start a tiny 2-byte DMA into audio_crc_buf
-			HAL_UART_Receive_DMA(&hlpuart1,
-								 audio_crc_buf,
-								 PKT_CRC_SIZE);
-			// Do NOT call uart_start_header_rx() yet; we still need CRC.
-		}
+	    if (audio_stream_active) {
+	        uint8_t req = UART_ACK_NEXT_AUDIO_CHUNK; // 'A'
+	        HAL_UART_Transmit(&hlpuart1, &req, 1, 10);
+	    }
 	}
-	else if (g_uart_rx.state == RX_STATE_WAIT_CRC) {
-		// We just finished receiving the 2 CRC bytes for an audio packet
-		if (g_uart_rx.header.data_type == PKT_DATA_AUDIO) {
-			audio_pkt_len   = g_uart_rx.payload_len;  // just payload length
-			audio_pkt_ready = 1;
-		}
 
-		// Now we can go back to waiting for a new header
-		uart_start_header_rx();
+	void HAL_DAC_ConvCpltCallbackCh1(DAC_HandleTypeDef *hdac)
+	{
+	    if (hdac->Instance != DAC1) return;
+
+	    half1_free = 1;
+
+	    if (audio_stream_active) {
+	        uint8_t req = UART_ACK_NEXT_AUDIO_CHUNK; // 'A'
+	        HAL_UART_Transmit(&hlpuart1, &req, 1, 10);
+	    }
 	}
 
 
-}
 
-void HAL_DAC_ConvHalfCpltCallbackCh1(DAC_HandleTypeDef *hdac)
-{
-	if (hdac->Instance != DAC1) return;
-
-	// Just finished playing first half [0 .. DAC_HALF_SAMPLES-1],
-	// now DMA is reading second half.
-	half0_free = 1;
-
-	// Request next audio chunk from PC
-	uint8_t req = UART_ACK_NEXT_AUDIO_CHUNK; // 'A'
-	HAL_UART_Transmit(&hlpuart1, &req, 1, 10);
+	void HAL_UART_ErrorCallback(UART_HandleTypeDef *huart)
+	{
+	    if (huart->Instance == LPUART1) {
+	        // Log something if you have a debug LED/UART
+	        protocol_soft_reset();
+	    }
+	}
 
 
-}
 
-void HAL_DAC_ConvCpltCallbackCh1(DAC_HandleTypeDef *hdac)
-{
-	if (hdac->Instance != DAC1) return;
 
-	// Just finished second half [DAC_HALF_SAMPLES .. end],
-	// now DMA wrapped back to first half.
-	half1_free = 1;
 
-	uint8_t req = UART_ACK_NEXT_AUDIO_CHUNK; // 'A'
-	HAL_UART_Transmit(&hlpuart1, &req, 1, 10);
 
-}
 
 /* USER CODE END 4 */
 

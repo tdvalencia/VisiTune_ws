@@ -57,6 +57,14 @@ void Error_Handler(void);
 /* USER CODE END EFP */
 
 /* Private defines -----------------------------------------------------------*/
+#define Col_4_Pin GPIO_PIN_0
+#define Col_4_GPIO_Port GPIOF
+#define Col_3_Pin GPIO_PIN_1
+#define Col_3_GPIO_Port GPIOF
+#define Col_2_Pin GPIO_PIN_2
+#define Col_2_GPIO_Port GPIOF
+#define Row_1_Pin GPIO_PIN_1
+#define Row_1_GPIO_Port GPIOC
 #define LOW_FILTER_Pin GPIO_PIN_0
 #define LOW_FILTER_GPIO_Port GPIOA
 #define MID_FILTER_Pin GPIO_PIN_1
@@ -65,6 +73,12 @@ void Error_Handler(void);
 #define HIGH_FILTER_GPIO_Port GPIOA
 #define DYNAMIC_FILTER_Pin GPIO_PIN_3
 #define DYNAMIC_FILTER_GPIO_Port GPIOA
+#define Row_2_Pin GPIO_PIN_4
+#define Row_2_GPIO_Port GPIOC
+#define Row_3_Pin GPIO_PIN_5
+#define Row_3_GPIO_Port GPIOC
+#define Row_4_Pin GPIO_PIN_2
+#define Row_4_GPIO_Port GPIOB
 #define REWIND_Pin GPIO_PIN_13
 #define REWIND_GPIO_Port GPIOF
 #define REWIND_EXTI_IRQn EXTI15_10_IRQn
@@ -74,6 +88,8 @@ void Error_Handler(void);
 #define FORWARD_Pin GPIO_PIN_1
 #define FORWARD_GPIO_Port GPIOG
 #define FORWARD_EXTI_IRQn EXTI1_IRQn
+#define Col_1_Pin GPIO_PIN_6
+#define Col_1_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
 
