@@ -4949,65 +4949,65 @@ LOAD /home/nick/st/stm32cubeide_1.19.0/plugins/com.st.stm32cube.ide.mcu.external
  .text.processFFT
                 0x08000528      0x2c4 ./Core/Src/main.o
                 0x08000528                processFFT
- .text.main     0x080007ec      0x32c ./Core/Src/main.o
+ .text.main     0x080007ec      0x330 ./Core/Src/main.o
                 0x080007ec                main
  .text.SystemClock_Config
-                0x08000b18       0xa0 ./Core/Src/main.o
-                0x08000b18                SystemClock_Config
+                0x08000b1c       0xa0 ./Core/Src/main.o
+                0x08000b1c                SystemClock_Config
  .text.MX_ADC1_Init
-                0x08000bb8      0x12c ./Core/Src/main.o
+                0x08000bbc      0x12c ./Core/Src/main.o
  .text.MX_DAC1_Init
-                0x08000ce4       0x68 ./Core/Src/main.o
+                0x08000ce8       0x68 ./Core/Src/main.o
  .text.MX_LPUART1_UART_Init
-                0x08000d4c       0x9c ./Core/Src/main.o
+                0x08000d50       0x9c ./Core/Src/main.o
  .text.MX_SPI1_Init
-                0x08000de8       0x7c ./Core/Src/main.o
+                0x08000dec       0x7c ./Core/Src/main.o
  .text.MX_TIM1_Init
-                0x08000e64       0xa4 ./Core/Src/main.o
+                0x08000e68       0xa4 ./Core/Src/main.o
  .text.MX_TIM2_Init
-                0x08000f08       0x9c ./Core/Src/main.o
+                0x08000f0c       0x9c ./Core/Src/main.o
  .text.MX_TIM3_Init
-                0x08000fa4       0x9c ./Core/Src/main.o
+                0x08000fa8       0x9c ./Core/Src/main.o
  .text.MX_DMA_Init
-                0x08001040       0x74 ./Core/Src/main.o
+                0x08001044       0x74 ./Core/Src/main.o
  .text.MX_GPIO_Init
-                0x080010b4      0x3e4 ./Core/Src/main.o
+                0x080010b8      0x3e4 ./Core/Src/main.o
  .text.HAL_GPIO_EXTI_Callback
-                0x08001498       0x70 ./Core/Src/main.o
-                0x08001498                HAL_GPIO_EXTI_Callback
+                0x0800149c       0x70 ./Core/Src/main.o
+                0x0800149c                HAL_GPIO_EXTI_Callback
  .text.uart_start_header_rx
-                0x08001508       0x24 ./Core/Src/main.o
+                0x0800150c       0x24 ./Core/Src/main.o
  .text.HAL_UART_RxCpltCallback
-                0x0800152c      0x20c ./Core/Src/main.o
-                0x0800152c                HAL_UART_RxCpltCallback
+                0x08001530      0x20c ./Core/Src/main.o
+                0x08001530                HAL_UART_RxCpltCallback
  .text.HAL_DAC_ConvHalfCpltCallbackCh1
-                0x08001738       0x40 ./Core/Src/main.o
-                0x08001738                HAL_DAC_ConvHalfCpltCallbackCh1
+                0x0800173c       0x40 ./Core/Src/main.o
+                0x0800173c                HAL_DAC_ConvHalfCpltCallbackCh1
  .text.HAL_DAC_ConvCpltCallbackCh1
-                0x08001778       0x40 ./Core/Src/main.o
-                0x08001778                HAL_DAC_ConvCpltCallbackCh1
+                0x0800177c       0x40 ./Core/Src/main.o
+                0x0800177c                HAL_DAC_ConvCpltCallbackCh1
  .text.Error_Handler
-                0x080017b8        0xc ./Core/Src/main.o
-                0x080017b8                Error_Handler
+                0x080017bc        0xc ./Core/Src/main.o
+                0x080017bc                Error_Handler
  .text.crc16_ccitt
-                0x080017c4       0xd6 ./Core/Src/packets.o
-                0x080017c4                crc16_ccitt
+                0x080017c8       0xd6 ./Core/Src/packets.o
+                0x080017c8                crc16_ccitt
  .text.parse_and_apply_image_packet
-                0x0800189a       0xbc ./Core/Src/packets.o
-                0x0800189a                parse_and_apply_image_packet
- *fill*         0x08001956        0x2 
+                0x0800189e       0xbc ./Core/Src/packets.o
+                0x0800189e                parse_and_apply_image_packet
+ *fill*         0x0800195a        0x2 
  .text.HAL_MspInit
-                0x08001958       0x48 ./Core/Src/stm32l4xx_hal_msp.o
-                0x08001958                HAL_MspInit
+                0x0800195c       0x48 ./Core/Src/stm32l4xx_hal_msp.o
+                0x0800195c                HAL_MspInit
  .text.HAL_ADC_MspInit
-                0x080019a0      0x1b4 ./Core/Src/stm32l4xx_hal_msp.o
-                0x080019a0                HAL_ADC_MspInit
+                0x080019a4      0x1b4 ./Core/Src/stm32l4xx_hal_msp.o
+                0x080019a4                HAL_ADC_MspInit
  .text.HAL_DAC_MspInit
-                0x08001b54       0xdc ./Core/Src/stm32l4xx_hal_msp.o
-                0x08001b54                HAL_DAC_MspInit
+                0x08001b58       0xdc ./Core/Src/stm32l4xx_hal_msp.o
+                0x08001b58                HAL_DAC_MspInit
  .text.HAL_UART_MspInit
-                0x08001c30      0x130 ./Core/Src/stm32l4xx_hal_msp.o
-                0x08001c30                HAL_UART_MspInit
+                0x08001c34      0x12c ./Core/Src/stm32l4xx_hal_msp.o
+                0x08001c34                HAL_UART_MspInit
  .text.HAL_SPI_MspInit
                 0x08001d60       0x84 ./Core/Src/stm32l4xx_hal_msp.o
                 0x08001d60                HAL_SPI_MspInit

@@ -493,7 +493,7 @@ int main(void)
 
 	      //Below translates src into the dst. Our goal is to turn src into the output of the FFT
 	      for (uint16_t i = 0; i < num_samples; ++i) {
-	          int32_t s = filter_buf[i];      // -32768..32767
+	          int32_t s = src[i];      // -32768..32767
 	          s += 32768;              // 0..65535
 	          if (s < 0)      s = 0;
 	          if (s > 65535)  s = 65535;
@@ -717,7 +717,7 @@ static void MX_LPUART1_UART_Init(void)
 
   /* USER CODE END LPUART1_Init 1 */
   hlpuart1.Instance = LPUART1;
-  hlpuart1.Init.BaudRate = 2000000;
+  hlpuart1.Init.BaudRate = 1500000;
   hlpuart1.Init.WordLength = UART_WORDLENGTH_8B;
   hlpuart1.Init.StopBits = UART_STOPBITS_1;
   hlpuart1.Init.Parity = UART_PARITY_NONE;
@@ -857,7 +857,7 @@ static void MX_TIM2_Init(void)
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 0;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 2720;
+  htim2.Init.Period = 3749;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
