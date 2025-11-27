@@ -27,6 +27,7 @@
 #include <string.h>
 #include "arm_math.h"
 #include "sd_card.h"
+#include "MIDI.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -95,8 +96,13 @@ uint8_t forward_flag = 0;
 // keypad
 char keyPress;
 
-// sd card
-uint16_t sd_buf[24000];
+// MIDI vars
+uint32_t MIDI_index = 0;
+uint8_t MIDI_playing = 0;
+uint8_t sound_effect_index = 0;
+const uint16_t* MIDI_effects[] = {crowd_cheer, bass_kick, eh, hi_hat, medium_kick, snare1, snare2, vine_boom};
+const uint32_t MIDI_lengths[] = {crowd_cheer_len, bass_kick_len, eh_len, hi_hat_len, medium_kick_len,
+								snare1_len, snare2_len, vine_boom_len};
 
 // UART RX context
 typedef enum {
@@ -245,7 +251,7 @@ static void protocol_soft_reset(void);
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
 
-void ADC_ReadAll_Polling(void)
+void ADC_ReadAll_Polling()
 {
   	HAL_ADC_Start(&hadc1);
     for (int i = 0; i < 4; i++)
@@ -387,6 +393,54 @@ static void protocol_soft_reset(void)
 	uart_start_header_rx();
 }
 
+void MIDI_Check() {
+	switch(keyPress) {
+	case '1':
+		sound_effect_index = 0;
+		MIDI_playing = 1;
+		break;
+	case '2':
+		sound_effect_index = 1;
+		MIDI_playing = 1;
+			break;
+	case '3':
+		sound_effect_index = 2;
+		MIDI_playing = 1;
+			break;
+	case 'A':
+		sound_effect_index = 3;
+		MIDI_playing = 1;
+			break;
+	case '4':
+			break;
+	case '5':
+			break;
+	case '6':
+			break;
+	case 'B':
+			break;
+	case '7':
+			break;
+	case '8':
+			break;
+	case '9':
+			break;
+	case 'C':
+			break;
+	case '*':
+			break;
+	case '0':
+			break;
+	case '#':
+			break;
+	case 'D':
+			break;
+	default:
+		break;
+
+	}
+}
+
 /* USER CODE END 0 */
 
 /**
@@ -482,10 +536,7 @@ int main(void)
   {
     keyPress = read_keypad();
 	ADC_ReadAll_Polling();
-
-	if(keyPress == 'A') {
-		read_sound_file("clap.raw", sd_buf, 24000);
-	}
+	MIDI_Check();
 
 	  if (ctrl_pkt_ready) {
 	          ctrl_pkt_ready = 0;
@@ -653,18 +704,54 @@ int main(void)
 
         processFFT(src, filter_buf, num_samples);
 
-	      for (uint16_t i = 0; i < num_samples; ++i) {
-	          int32_t s = filter_buf[i];      // -32768..32767
-	          s += 32768;              // 0..65535
-	          if (s < 0)      s = 0;
-	          if (s > 65535)  s = 65535;
-	          dst[i] = (uint16_t)(s >> 4);   // 12-bit right aligned
-	      }
+        for (uint16_t i = 0; i < num_samples; ++i)
+        {
+            // Main audio (16-bit signed)
+            int32_t a = filter_buf[i];      // -32768..32767
+
+            // MIDI audio (12-bit signed)
+            int32_t m = 0;
+            if (MIDI_playing && MIDI_index < MIDI_lengths[sound_effect_index]) {
+                m = MIDI_effects[sound_effect_index][MIDI_index++]; // -2048..+2047
+            } else {
+                MIDI_playing = 0;
+                MIDI_index = 0;
+            }
+
+            // -------- MIXING --------
+            // Scale main audio down to roughly same range as MIDI
+            a >>= 3;  // -4096..4095
+
+            int32_t mix = a + m;
+
+            // Clip to 12-bit signed range
+            if (mix < -2048) mix = -2048;
+            if (mix > 2047)  mix = 2047;
+
+            // Convert to unsigned 12-bit for DAC
+            dst[i] = (uint16_t)(mix + 2048);
+        }
 
 	      // Pad rest of half with mid-scale if packet smaller than half
-	      for (uint16_t i = num_samples; i < DAC_HALF_SAMPLES; ++i) {
-	          dst[i] = 2048;
-	      }
+        for (uint16_t i = num_samples; i < DAC_HALF_SAMPLES; ++i)
+        {
+            int32_t m = 0;
+            if (MIDI_playing && MIDI_index < MIDI_lengths[sound_effect_index]) {
+                m = MIDI_effects[sound_effect_index][MIDI_index++];
+            } else {
+                MIDI_playing = 0;
+                MIDI_index = 0;
+            }
+
+            // Only MIDI is left
+            int32_t mix = m;
+
+            // Clip
+            if (mix < -2048) mix = -2048;
+            if (mix > 2047)  mix = 2047;
+
+            dst[i] = (uint16_t)(mix + 2048);
+        }
 
 	      // ---- Priming / DAC-start logic ----
 	      // If DAC is not running yet, we are in "priming" mode.
@@ -1098,7 +1185,7 @@ static void MX_TIM2_Init(void)
   htim2.Instance = TIM2;
   htim2.Init.Prescaler = 0;
   htim2.Init.CounterMode = TIM_COUNTERMODE_UP;
-  htim2.Init.Period = 4999;
+  htim2.Init.Period = 5199;
   htim2.Init.ClockDivision = TIM_CLOCKDIVISION_DIV1;
   htim2.Init.AutoReloadPreload = TIM_AUTORELOAD_PRELOAD_DISABLE;
   if (HAL_TIM_Base_Init(&htim2) != HAL_OK)
@@ -1577,7 +1664,6 @@ static void uart_start_header_rx(void)
 	    if (hdac->Instance != DAC1) return;
 
 	    half1_free = 1;
-	    memset(sd_buf, 0, sizeof(sd_buf));
 
 	    if (audio_stream_active) {
 	        uint8_t req = UART_ACK_NEXT_AUDIO_CHUNK; // 'A'
@@ -1594,10 +1680,6 @@ static void uart_start_header_rx(void)
 	        protocol_soft_reset();
 	    }
 	}
-
-
-
-
 
 
 

@@ -43,7 +43,7 @@ Core/Src/main.o: ../Core/Src/main.c ../Core/Inc/main.h \
  ../Core/Inc/packets.h ../Core/Inc/tft.h \
  /home/nick/STM32CubeIDE/VisiTune_ws/VisiTune/Drivers/CMSIS/CMSIS-DSP/arm_math.h \
  ../Drivers/CMSIS/Include/cmsis_compiler.h ../Core/Inc/sd_card.h \
- ../Core/Inc/main.h
+ ../Core/Inc/main.h ../Core/Inc/MIDI.h
 ../Core/Inc/main.h:
 ../Drivers/STM32L4xx_HAL_Driver/Inc/stm32l4xx_hal.h:
 ../Core/Inc/stm32l4xx_hal_conf.h:
@@ -95,3 +95,4 @@ Core/Src/main.o: ../Core/Src/main.c ../Core/Inc/main.h \
 ../Drivers/CMSIS/Include/cmsis_compiler.h:
 ../Core/Inc/sd_card.h:
 ../Core/Inc/main.h:
+../Core/Inc/MIDI.h:
