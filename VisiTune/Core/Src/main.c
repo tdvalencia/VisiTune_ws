@@ -79,6 +79,7 @@ DMA_HandleTypeDef hdma_lpuart1_rx;
 
 SPI_HandleTypeDef hspi1;
 SPI_HandleTypeDef hspi2;
+DMA_HandleTypeDef hdma_spi2_rx;
 
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
@@ -95,7 +96,7 @@ uint8_t forward_flag = 0;
 char keyPress;
 
 // sd card
-uint16_t sd_buf[DAC_BUF_SAMPLES];
+uint16_t sd_buf[24000];
 
 // UART RX context
 typedef enum {
@@ -471,7 +472,6 @@ int main(void)
 
   HAL_ADCEx_Calibration_Start(&hadc1, ADC_SINGLE_ENDED);
 
-
   /* USER CODE END 2 */
 
   /* Infinite loop */
@@ -482,6 +482,10 @@ int main(void)
   {
     keyPress = read_keypad();
 	ADC_ReadAll_Polling();
+
+	if(keyPress == 'A') {
+		read_sound_file("clap.raw", sd_buf, 24000);
+	}
 
 	  if (ctrl_pkt_ready) {
 	          ctrl_pkt_ready = 0;
@@ -1138,6 +1142,9 @@ static void MX_DMA_Init(void)
   /* DMA1_Channel3_IRQn interrupt configuration */
   HAL_NVIC_SetPriority(DMA1_Channel3_IRQn, 0, 0);
   HAL_NVIC_EnableIRQ(DMA1_Channel3_IRQn);
+  /* DMA1_Channel4_IRQn interrupt configuration */
+  HAL_NVIC_SetPriority(DMA1_Channel4_IRQn, 0, 0);
+  HAL_NVIC_EnableIRQ(DMA1_Channel4_IRQn);
 
 }
 
@@ -1570,6 +1577,7 @@ static void uart_start_header_rx(void)
 	    if (hdac->Instance != DAC1) return;
 
 	    half1_free = 1;
+	    memset(sd_buf, 0, sizeof(sd_buf));
 
 	    if (audio_stream_active) {
 	        uint8_t req = UART_ACK_NEXT_AUDIO_CHUNK; // 'A'

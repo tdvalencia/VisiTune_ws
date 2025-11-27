@@ -11,7 +11,7 @@
 #include "main.h"
 #include "ff.h"
 
-void read_sound_file(const TCHAR* file_name, uint8_t *pData, uint32_t dataSize);
+void read_sound_file(const TCHAR* file_name, uint16_t *pData, uint32_t dataSize);
 
 
 
