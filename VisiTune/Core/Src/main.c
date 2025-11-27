@@ -18,6 +18,7 @@
 /* USER CODE END Header */
 /* Includes ------------------------------------------------------------------*/
 #include "main.h"
+#include "fatfs.h"
 
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
@@ -25,7 +26,7 @@
 #include "tft.h"
 #include <string.h>
 #include "arm_math.h"
-
+#include "sd_card.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -35,31 +36,30 @@
 
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
+#define PKT_SYNC_SIZE    2   // 0xA5, 0x5A
+#define PKT_HEADER_SIZE  (sizeof(pkt_header_t))  // 7 bytes (packed)
+#define PKT_PREFIX_SIZE  (PKT_SYNC_SIZE + PKT_HEADER_SIZE) // 9 bytes before payload
+#define PKT_CRC_SIZE     2
 
-		#define PKT_SYNC_SIZE    2   // 0xA5, 0x5A
-		#define PKT_HEADER_SIZE  (sizeof(pkt_header_t))  // 7 bytes (packed)
-		#define PKT_PREFIX_SIZE  (PKT_SYNC_SIZE + PKT_HEADER_SIZE) // 9 bytes before payload
-		#define PKT_CRC_SIZE     2
+#define UART_ACK_HEADER  'H'
+#define UART_ACK_OK      'S'
+#define UART_ACK_ERR     'E'
+#define UART_ACK_NEXT_AUDIO_CHUNK 'A'
 
-		#define UART_ACK_HEADER  'H'
-		#define UART_ACK_OK      'S'
-		#define UART_ACK_ERR     'E'
-		#define UART_ACK_NEXT_AUDIO_CHUNK 'A'
+// Packet size/overhead (must match Python script)
+#define PKT_OVERHEAD     (PKT_SYNC_SIZE + PKT_HEADER_SIZE + PKT_CRC_SIZE) // 11
+#define PKT_MAX_SIZE     0xFFFFu  // total packet: sync+header+payload+CRC
 
-		// Packet size/overhead (must match Python script)
-		#define PKT_OVERHEAD     (PKT_SYNC_SIZE + PKT_HEADER_SIZE + PKT_CRC_SIZE) // 11
-		#define PKT_MAX_SIZE     0xFFFFu  // total packet: sync+header+payload+CRC
+#define IMG_PKT_MAX_SIZE     PKT_MAX_SIZE
+#define AUD_PKT_MAX_SIZE     PKT_MAX_SIZE
 
-		#define IMG_PKT_MAX_SIZE     PKT_MAX_SIZE
-		#define AUD_PKT_MAX_SIZE     PKT_MAX_SIZE
+#define IMG_MAX_PAYLOAD_BYTES  (IMG_PKT_MAX_SIZE - PKT_OVERHEAD)
+#define AUD_MAX_PAYLOAD_BYTES  (AUD_PKT_MAX_SIZE - PKT_OVERHEAD)
 
-		#define IMG_MAX_PAYLOAD_BYTES  (IMG_PKT_MAX_SIZE - PKT_OVERHEAD)
-		#define AUD_MAX_PAYLOAD_BYTES  (AUD_PKT_MAX_SIZE - PKT_OVERHEAD)
-
-		// DAC circular buffer: 2 halves, each half holds one max audio payload worth of samples
-		// 2 bytes per 16-bit PCM sample => samples = bytes/2
-		#define DAC_HALF_SAMPLES   (AUD_MAX_PAYLOAD_BYTES / 2u)
-		#define DAC_BUF_SAMPLES    (2u * DAC_HALF_SAMPLES)
+// DAC circular buffer: 2 halves, each half holds one max audio payload worth of samples
+// 2 bytes per 16-bit PCM sample => samples = bytes/2
+#define DAC_HALF_SAMPLES   (AUD_MAX_PAYLOAD_BYTES / 2u)
+#define DAC_BUF_SAMPLES    (2u * DAC_HALF_SAMPLES)
 /* USER CODE END PD */
 
 /* Private macro -------------------------------------------------------------*/
@@ -78,6 +78,7 @@ UART_HandleTypeDef hlpuart1;
 DMA_HandleTypeDef hdma_lpuart1_rx;
 
 SPI_HandleTypeDef hspi1;
+SPI_HandleTypeDef hspi2;
 
 TIM_HandleTypeDef htim1;
 TIM_HandleTypeDef htim2;
@@ -92,6 +93,9 @@ uint8_t forward_flag = 0;
 
 // keypad
 char keyPress;
+
+// sd card
+uint16_t sd_buf[DAC_BUF_SAMPLES];
 
 // UART RX context
 typedef enum {
@@ -228,6 +232,7 @@ static void MX_LPUART1_UART_Init(void);
 static void MX_DAC1_Init(void);
 static void MX_TIM2_Init(void);
 static void MX_ADC1_Init(void);
+static void MX_SPI2_Init(void);
 /* USER CODE BEGIN PFP */
 static void uart_start_header_rx(void);
 void processFFT(const q15_t* in, q15_t* out, uint16_t num_samples);
@@ -359,27 +364,27 @@ char read_keypad() {
 }
 
 
-	static void protocol_soft_reset(void)
-	{
-		__disable_irq();
-		HAL_UART_AbortReceive(&hlpuart1);
-		g_uart_rx.state       = RX_STATE_WAIT_PREFIX;
-		g_uart_rx.payload_len = 0;
-		g_uart_rx.payload_dst = NULL;
+static void protocol_soft_reset(void)
+{
+	__disable_irq();
+	HAL_UART_AbortReceive(&hlpuart1);
+	g_uart_rx.state       = RX_STATE_WAIT_PREFIX;
+	g_uart_rx.payload_len = 0;
+	g_uart_rx.payload_dst = NULL;
 
-		image_pkt_ready = 0;
-		image_pkt_len   = 0;
-		audio_pkt_ready = 0;
-		audio_pkt_len   = 0;
+	image_pkt_ready = 0;
+	image_pkt_len   = 0;
+	audio_pkt_ready = 0;
+	audio_pkt_len   = 0;
 
-		half0_free = 1;
-		half1_free = 1;
-		audio_stream_active = 0;
-		audio_prime_count   = 0;  // NEW: reset priming
-		__enable_irq();
+	half0_free = 1;
+	half1_free = 1;
+	audio_stream_active = 0;
+	audio_prime_count   = 0;  // NEW: reset priming
+	__enable_irq();
 
-		uart_start_header_rx();
-	}
+	uart_start_header_rx();
+}
 
 /* USER CODE END 0 */
 
@@ -419,6 +424,8 @@ int main(void)
   MX_DAC1_Init();
   MX_TIM2_Init();
   MX_ADC1_Init();
+  MX_FATFS_Init();
+  MX_SPI2_Init();
   /* USER CODE BEGIN 2 */
 //  tft_init();
 //  tft_fill_rect(0, 0, 480, 320, 0xAAAA);
@@ -980,6 +987,46 @@ static void MX_SPI1_Init(void)
 }
 
 /**
+  * @brief SPI2 Initialization Function
+  * @param None
+  * @retval None
+  */
+static void MX_SPI2_Init(void)
+{
+
+  /* USER CODE BEGIN SPI2_Init 0 */
+
+  /* USER CODE END SPI2_Init 0 */
+
+  /* USER CODE BEGIN SPI2_Init 1 */
+
+  /* USER CODE END SPI2_Init 1 */
+  /* SPI2 parameter configuration*/
+  hspi2.Instance = SPI2;
+  hspi2.Init.Mode = SPI_MODE_MASTER;
+  hspi2.Init.Direction = SPI_DIRECTION_2LINES;
+  hspi2.Init.DataSize = SPI_DATASIZE_8BIT;
+  hspi2.Init.CLKPolarity = SPI_POLARITY_LOW;
+  hspi2.Init.CLKPhase = SPI_PHASE_1EDGE;
+  hspi2.Init.NSS = SPI_NSS_SOFT;
+  hspi2.Init.BaudRatePrescaler = SPI_BAUDRATEPRESCALER_16;
+  hspi2.Init.FirstBit = SPI_FIRSTBIT_MSB;
+  hspi2.Init.TIMode = SPI_TIMODE_DISABLE;
+  hspi2.Init.CRCCalculation = SPI_CRCCALCULATION_DISABLE;
+  hspi2.Init.CRCPolynomial = 7;
+  hspi2.Init.CRCLength = SPI_CRC_LENGTH_DATASIZE;
+  hspi2.Init.NSSPMode = SPI_NSS_PULSE_ENABLE;
+  if (HAL_SPI_Init(&hspi2) != HAL_OK)
+  {
+    Error_Handler();
+  }
+  /* USER CODE BEGIN SPI2_Init 2 */
+
+  /* USER CODE END SPI2_Init 2 */
+
+}
+
+/**
   * @brief TIM1 Initialization Function
   * @param None
   * @retval None
@@ -1121,6 +1168,9 @@ static void MX_GPIO_Init(void)
   HAL_GPIO_WritePin(GPIOF, Col_4_Pin|Col_3_Pin|Col_2_Pin, GPIO_PIN_SET);
 
   /*Configure GPIO pin Output Level */
+  HAL_GPIO_WritePin(SD_CS_GPIO_Port, SD_CS_Pin, GPIO_PIN_RESET);
+
+  /*Configure GPIO pin Output Level */
   HAL_GPIO_WritePin(GPIOC, GPIO_PIN_6|GPIO_PIN_8|GPIO_PIN_9, GPIO_PIN_RESET);
 
   /*Configure GPIO pin Output Level */
@@ -1181,12 +1231,11 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Pull = GPIO_PULLUP;
   HAL_GPIO_Init(GPIOG, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PB12 PB13 PB15 */
-  GPIO_InitStruct.Pin = GPIO_PIN_12|GPIO_PIN_13|GPIO_PIN_15;
-  GPIO_InitStruct.Mode = GPIO_MODE_AF_PP;
+  /*Configure GPIO pins : SD_CS_Pin Col_1_Pin */
+  GPIO_InitStruct.Pin = SD_CS_Pin|Col_1_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  GPIO_InitStruct.Alternate = GPIO_AF13_SAI2;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PB14 */
@@ -1281,13 +1330,6 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_VERY_HIGH;
   GPIO_InitStruct.Alternate = GPIO_AF6_SPI3;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-
-  /*Configure GPIO pin : Col_1_Pin */
-  GPIO_InitStruct.Pin = Col_1_Pin;
-  GPIO_InitStruct.Mode = GPIO_MODE_OUTPUT_PP;
-  GPIO_InitStruct.Pull = GPIO_NOPULL;
-  GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
-  HAL_GPIO_Init(Col_1_GPIO_Port, &GPIO_InitStruct);
 
   /*Configure GPIO pins : PB8 PB9 */
   GPIO_InitStruct.Pin = GPIO_PIN_8|GPIO_PIN_9;

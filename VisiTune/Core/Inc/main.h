@@ -88,11 +88,13 @@ void Error_Handler(void);
 #define FORWARD_Pin GPIO_PIN_1
 #define FORWARD_GPIO_Port GPIOG
 #define FORWARD_EXTI_IRQn EXTI1_IRQn
+#define SD_CS_Pin GPIO_PIN_12
+#define SD_CS_GPIO_Port GPIOB
 #define Col_1_Pin GPIO_PIN_6
 #define Col_1_GPIO_Port GPIOB
 
 /* USER CODE BEGIN Private defines */
-
+#define SD_SPI_HANDLE hspi2
 /* USER CODE END Private defines */
 
 #ifdef __cplusplus
